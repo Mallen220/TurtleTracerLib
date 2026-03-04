@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import com.pedropathingplus.command.trigger.Trigger;
+
 /**
  * The core component of the command-based framework, responsible for managing command execution,
  * subsystem requirements, and periodic updates.
@@ -67,6 +69,11 @@ public class CommandScheduler {
     private boolean inRunLoop = false;
 
     /**
+     * The list of registered triggers.
+     */
+    private final List<Trigger> activeTriggers = new ArrayList<>();
+
+    /**
      * Retrieves the singleton instance of the {@code CommandScheduler}.
      *
      * @return The singleton instance.
@@ -82,6 +89,17 @@ public class CommandScheduler {
      * Private constructor to enforce the Singleton pattern.
      */
     private CommandScheduler() {}
+
+    /**
+     * Registers a trigger to be polled periodically.
+     *
+     * @param trigger The trigger to register.
+     */
+    public void registerTrigger(Trigger trigger) {
+        if (!activeTriggers.contains(trigger)) {
+            activeTriggers.add(trigger);
+        }
+    }
 
     /**
      * Registers a subsystem to receive periodic updates.
@@ -234,6 +252,11 @@ public class CommandScheduler {
     public void run() {
         inRunLoop = true;
 
+        // Poll triggers
+        for (Trigger trigger : activeTriggers) {
+            trigger.poll();
+        }
+
         // Run subsystem periodic methods
         for (Object subsystem : registeredSubsystems) {
             runPeriodic(subsystem);
@@ -311,6 +334,7 @@ public class CommandScheduler {
     public void reset() {
         // Clear all internal state
         scheduledCommands.clear();
+        activeTriggers.clear();
         requirements.clear();
         registeredSubsystems.clear();
         defaultCommands.clear();

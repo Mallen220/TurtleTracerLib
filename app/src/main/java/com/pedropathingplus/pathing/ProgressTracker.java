@@ -28,9 +28,9 @@ public class ProgressTracker {
   private PathChain currentChain;
 
   /**
-   * A map of event names to their trigger positions (normalized 0.0 to 1.0).
+   * A map of event names to their trigger zones.
    */
-  private final Map<String, Double> eventPositions = new HashMap<>();
+  private final Map<String, EventZone> eventZones = new HashMap<>();
 
   /**
    * A map tracking whether each event has been triggered to prevent duplicate executions.
@@ -124,10 +124,21 @@ public class ProgressTracker {
    * @param position  The progress threshold (0.0 to 1.0) at which to trigger the event.
    */
   public void registerEvent(String eventName, double position) {
-    eventPositions.put(eventName, position);
+    registerEvent(eventName, position, position);
+  }
+
+  /**
+   * Registers a zoned event to be active when the robot is within the specified progress range.
+   *
+   * @param eventName      The unique name of the event.
+   * @param startPosition  The start progress threshold (0.0 to 1.0).
+   * @param endPosition    The end progress threshold (0.0 to 1.0).
+   */
+  public void registerEvent(String eventName, double startPosition, double endPosition) {
+    eventZones.put(eventName, new EventZone(startPosition, endPosition));
     eventTriggered.put(eventName, false);
     if (telemetry != null) {
-      telemetry.addData("Event Registered", eventName + " @ " + position);
+      telemetry.addData("Event Registered", eventName + " @ [" + startPosition + ", " + endPosition + "]");
       telemetry.update();
     }
   }
@@ -136,7 +147,7 @@ public class ProgressTracker {
    * Clears all registered events and resets their trigger status.
    */
   public void clearEvents() {
-    eventPositions.clear();
+    eventZones.clear();
     eventTriggered.clear();
     if (telemetry != null) {
       telemetry.addData("ProgressTracker", "Events cleared");
@@ -186,22 +197,38 @@ public class ProgressTracker {
    * @return {@code true} if the event threshold has been reached and it hasn't been triggered yet.
    */
   public boolean shouldTriggerEvent(String eventName) {
-    if (!eventPositions.containsKey(eventName) || isEventTriggered(eventName)) {
+    if (!eventZones.containsKey(eventName) || isEventTriggered(eventName)) {
       return false;
     }
 
     updateProgress();
-    double eventPosition = eventPositions.get(eventName);
+    EventZone zone = eventZones.get(eventName);
+    boolean shouldTrigger = zone.contains(pathProgress) || pathProgress >= zone.getStartPosition();
 
     if (telemetry != null) {
       telemetry.addData("Event Check", eventName);
-      telemetry.addData("Event Position", eventPosition);
+      telemetry.addData("Event Zone", "[" + zone.getStartPosition() + ", " + zone.getEndPosition() + "]");
       telemetry.addData("Current Progress", pathProgress);
-      telemetry.addData("Should Trigger", pathProgress >= eventPosition);
+      telemetry.addData("Should Trigger", shouldTrigger);
       telemetry.update();
     }
 
-    return pathProgress >= eventPosition;
+    return shouldTrigger;
+  }
+
+  /**
+   * Checks if the given event is currently active (i.e. the robot's progress is within the event's zone).
+   *
+   * @param eventName The name of the event.
+   * @return {@code true} if the current progress is within the event's zone.
+   */
+  public boolean isEventActive(String eventName) {
+    if (!eventZones.containsKey(eventName)) {
+      return false;
+    }
+
+    updateProgress();
+    return eventZones.get(eventName).contains(pathProgress);
   }
 
   /**

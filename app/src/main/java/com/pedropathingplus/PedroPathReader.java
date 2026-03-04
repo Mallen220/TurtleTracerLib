@@ -12,6 +12,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.pedropathingplus.pathing.ProgressTracker;
+
 /**
  * A utility class for reading and parsing Pedro Pathing (.pp) files from the Android assets directory.
  * <p>
@@ -75,6 +77,16 @@ public final class PedroPathReader {
   }
 
   /**
+   * Retrieves the raw list of line segments parsed from the JSON.
+   * This is useful for building autonomous routines that need to process lines and their event markers.
+   *
+   * @return The list of line segments.
+   */
+  public List<PedroPP.Line> getLines() {
+      return file.lines;
+  }
+
+  /**
    * Processes the raw data from the {@code PedroPP} object and populates the {@code poses} map.
    * <p>
    * This method iterates through the start point and all lines defined in the file, converting
@@ -105,6 +117,33 @@ public final class PedroPathReader {
       lastX = lx;
       lastY = ly;
       lastDeg = heading;
+    }
+  }
+
+  /**
+   * Registers all event markers parsed from the JSON file to the provided {@link ProgressTracker}.
+   * <p>
+   * Iterates through all lines and their associated event markers. If a marker has a single point,
+   * it registers a single point event. If it has two points, it registers a zoned event.
+   * </p>
+   *
+   * @param tracker The {@link ProgressTracker} to register the events to.
+   */
+  public void registerEvents(ProgressTracker tracker) {
+    if (file == null || file.lines == null) return;
+
+    for (PedroPP.Line line : file.lines) {
+      if (line.eventMarkers != null) {
+        for (PedroPP.EventMarker marker : line.eventMarkers) {
+          if (marker.points != null && marker.points.length > 0) {
+            if (marker.points.length == 1) {
+              tracker.registerEvent(marker.name, marker.points[0]);
+            } else if (marker.points.length >= 2) {
+              tracker.registerEvent(marker.name, marker.points[0], marker.points[1]);
+            }
+          }
+        }
+      }
     }
   }
 
@@ -216,6 +255,18 @@ class PedroPP {
     public String name;
     /** The endpoint definition of this line segment. */
     public EndPoint endPoint;
+    /** The event markers associated with this line segment. */
+    public List<EventMarker> eventMarkers;
+  }
+
+  /**
+   * Represents an event marker in the JSON file.
+   */
+  public static class EventMarker {
+    /** The name of the event marker. */
+    public String name;
+    /** The points defining the event marker zone. Single value for point, two for zone. */
+    public double[] points;
   }
 
   /**
