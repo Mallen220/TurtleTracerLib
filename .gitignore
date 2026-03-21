@@ -29,3 +29,5 @@ build
 android-sdk/
 cmdline-tools/
 local.properties
+
+.jules/
