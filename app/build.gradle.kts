@@ -4,7 +4,7 @@ plugins {
 }
 
 android {
-    namespace = "com.pedropathingplus"
+    namespace = "com.turtletracerlib"
     compileSdk = 34
 
     defaultConfig {
@@ -36,7 +36,7 @@ afterEvaluate {
     publishing {
         publications {
             create<org.gradle.api.publish.maven.MavenPublication>("maven") {
-                artifactId = "PedroPathingPlus"
+                artifactId = "TurtleTracerLib"
                 // Use the project group and version as provided (JitPack sets -Pgroup/-Pversion when invoking)
                 // Attach the AAR produced by the Android library module. The AAR is created by the "assembleRelease" task.
                 val aarFile = file("$buildDir/outputs/aar/${project.name}-release.aar")
@@ -55,8 +55,8 @@ afterEvaluate {
                 // Provide a simple POM customization (optional)
                 pom {
                     name.set("${project.name}")
-                    description.set("PedroPathingPlus Android library")
-                    url.set("https://github.com/${project.findProperty("githubOwner") ?: "Mallen220"}/${project.findProperty("githubRepo") ?: "PedroPathingPlus"}")
+                    description.set("TurtleTracerLib Android library")
+                    url.set("https://github.com/${project.findProperty("githubOwner") ?: "Mallen220"}/${project.findProperty("githubRepo") ?: "TurtleTracerLib"}")
                     licenses {
                         license {
                             name.set("The Apache License, Version 2.0")

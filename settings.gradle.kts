@@ -16,5 +16,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "PedroPathingPlus"
+rootProject.name = "TurtleTracerLib"
 include(":app")

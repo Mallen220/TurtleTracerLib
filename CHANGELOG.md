@@ -1,3 +1,9 @@
+## v2.0.0 - 2026-03-21
+
+- **PROJECT RENAME**: Renamed project from `PedroPathingPlus` to `TurtleTracerLib`.
+- Updated package names to `com.turtletracerlib`.
+- Updated Gradle configurations and documentation.
+
 ## v1.0.6 - 2026-01-11
 
 Added progress tracking for rotate events.
