@@ -164,9 +164,9 @@ fi
 # If detection failed, print a helpful debug line for the user (but continue)
 if [[ -z "${OWNER}" || -z "${REPO}" ]]; then
   echo "Warning: unable to auto-detect OWNER/REPO from remote '${REMOTE}'. Origin URL: '${ORIGIN_URL}'"
-  echo "If this is unexpected, ensure your remote is set to GitHub (for example: git@github.com:Mallen220/PedroPathingPlus.git)"
+  echo "If this is unexpected, ensure your remote is set to GitHub (for example: git@github.com:Mallen220/TurtleTracerLib.git)"
   echo "To set the correct origin URL run:"
-  echo "  git remote set-url ${REMOTE} git@github.com:Mallen220/PedroPathingPlus.git"
+  echo "  git remote set-url ${REMOTE} git@github.com:Mallen220/TurtleTracerLib.git"
 else
   echo "Detected GitHub repo: ${OWNER}/${REPO} (from ${ORIGIN_URL})"
 fi
