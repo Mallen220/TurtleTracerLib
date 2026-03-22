@@ -59,8 +59,8 @@ afterEvaluate {
                     url.set("https://github.com/${project.findProperty("githubOwner") ?: "Mallen220"}/${project.findProperty("githubRepo") ?: "TurtleTracerLib"}")
                     licenses {
                         license {
-                            name.set("The Apache License, Version 2.0")
-                            url.set("http://www.apache.org/licenses/LICENSE-2.0.txt")
+                            name.set("Modified Apache License, Version 2.0")
+                            url.set("https://raw.githubusercontent.com/Mallen220/TurtleTracerLib/refs/heads/main/LICENSE")
                         }
                     }
                     developers {

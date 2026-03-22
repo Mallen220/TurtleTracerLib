@@ -1,6 +1,6 @@
 # TurtleTracerLib
 
-**TurtleTracerLib** is an advanced pathing library for the FIRST Tech Challenge (FTC), built on top of the powerful [Pedro Pathing](https://github.com/Pedro-Pathing/PedroPathing) library and integrating robust command-based structures.
+**TurtleTracerLib** is an advanced pathing library for the FIRST Tech Challenge (FTC), built on top of the powerful [Pedro Pathing](https://github.com/Pedro-Pathing/PedroPathing) library and integrating robust command-based structures. It is not affiliated with FIRST or the developers of Pedro Pathing.
 
 > [!IMPORTANT]
 > **STAY TUNED!**
@@ -94,4 +94,11 @@ Notes:
 
 ---
 
+This project includes third-party components that are licensed separately.
+See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
+
+---
+
 **Built by [Mallen220](https://github.com/Mallen220) & Contributors**
+Not officially affiliated with FIRST® or Pedro Pathing.
+
