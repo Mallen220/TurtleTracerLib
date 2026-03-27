@@ -71,6 +71,18 @@ public interface Command {
     }
 
     /**
+     * Specifies whether the command is interruptible.
+     * <p>
+     * If false, the command cannot be interrupted by other commands that share its requirements.
+     * </p>
+     *
+     * @return true if the command is interruptible, false otherwise.
+     */
+    default boolean isInterruptible() {
+        return true;
+    }
+
+    /**
      * Schedules this command for execution.
      * <p>
      * This is a convenience method that delegates to {@link CommandScheduler#schedule(Object...)}.
@@ -78,5 +90,17 @@ public interface Command {
      */
     default void schedule() {
         CommandScheduler.getInstance().schedule(this);
+    }
+
+    /**
+     * Schedules this command for execution with a specific interruptibility.
+     * <p>
+     * This is a convenience method that delegates to {@link CommandScheduler#scheduleWithInterrupt(boolean, Object...)}.
+     * </p>
+     *
+     * @param interruptible whether the command is interruptible.
+     */
+    default void schedule(boolean interruptible) {
+        CommandScheduler.getInstance().scheduleWithInterrupt(interruptible, this);
     }
 }

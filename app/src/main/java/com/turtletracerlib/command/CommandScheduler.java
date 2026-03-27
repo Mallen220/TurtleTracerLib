@@ -58,6 +58,17 @@ public class CommandScheduler {
     private final List<Command> toSchedule = new ArrayList<>();
 
     /**
+     * Tracks the interruptibility of currently scheduled commands.
+     * If a command is not in this map, it defaults to its `isInterruptible()` value.
+     */
+    private final Map<Command, Boolean> interruptibleCommands = new HashMap<>();
+
+    /**
+     * A temporary list of the interruptibility state for commands to be scheduled.
+     */
+    private final List<Boolean> toScheduleInterruptible = new ArrayList<>();
+
+    /**
      * A temporary list of commands to be canceled in the next iteration of the run loop.
      */
     private final List<Command> toCancel = new ArrayList<>();
@@ -144,9 +155,39 @@ public class CommandScheduler {
      * @param commands The commands or objects to schedule.
      */
     public void schedule(Object... commands) {
+        // Schedule using each command's default interruptibility.
+        // We defer evaluation of isInterruptible() to the actual scheduling logic.
+        if (inRunLoop) {
+            for (Object command : commands) {
+                Command cmd = asCommand(command);
+                toSchedule.add(cmd);
+                toScheduleInterruptible.add(cmd.isInterruptible());
+            }
+            return;
+        }
+
+        for (Object commandObj : commands) {
+            Command command = asCommand(commandObj);
+            scheduleWithInterrupt(command.isInterruptible(), command);
+        }
+    }
+
+    /**
+     * Schedules one or more commands for execution with a specific interruptibility.
+     * <p>
+     * If a command requires a subsystem that is already in use, the current command using that subsystem is interrupted
+     * only if it is interruptible. Otherwise, the new command is skipped.
+     * Commands can be {@link Command} objects, {@link Runnable}s, or generic objects adapted via reflection.
+     * </p>
+     *
+     * @param interruptible whether the scheduled commands can be interrupted by newly scheduled commands.
+     * @param commands      The commands or objects to schedule.
+     */
+    public void scheduleWithInterrupt(boolean interruptible, Object... commands) {
         if (inRunLoop) {
             for (Object command : commands) {
                 toSchedule.add(asCommand(command));
+                toScheduleInterruptible.add(interruptible);
             }
             return;
         }
@@ -157,16 +198,32 @@ public class CommandScheduler {
             if (scheduledCommands.contains(command)) continue;
 
             // Check requirements and resolve conflicts
+            boolean canSchedule = true;
             Set<Object> requirementsSet = command.getRequirements();
             for (Object subsystem : requirementsSet) {
                 if (requirements.containsKey(subsystem)) {
                     Command currentCommand = requirements.get(subsystem);
-                    // Cancel the current command using this subsystem
+                    // Check if the current command using this subsystem is interruptible
+                    boolean currentInterruptible = interruptibleCommands.getOrDefault(currentCommand, currentCommand.isInterruptible());
+                    if (!currentInterruptible) {
+                        canSchedule = false;
+                        break;
+                    }
+                }
+            }
+
+            if (!canSchedule) continue;
+
+            // Cancel the current commands using these subsystems
+            for (Object subsystem : requirementsSet) {
+                if (requirements.containsKey(subsystem)) {
+                    Command currentCommand = requirements.get(subsystem);
                     cancel(currentCommand);
                 }
             }
 
             // Schedule the command
+            interruptibleCommands.put(command, interruptible);
             initCommand(command, requirementsSet);
         }
     }
@@ -227,6 +284,7 @@ public class CommandScheduler {
 
             command.end(true);
             scheduledCommands.remove(command);
+            interruptibleCommands.remove(command);
 
             // Remove from requirements map
             for (Object subsystem : command.getRequirements()) {
@@ -270,6 +328,7 @@ public class CommandScheduler {
             if (command.isFinished()) {
                 command.end(false);
                 iterator.remove();
+                interruptibleCommands.remove(command);
 
                 // Remove from requirements map
                 for (Object subsystem : command.getRequirements()) {
@@ -282,9 +341,13 @@ public class CommandScheduler {
 
         // Process pending scheduling and cancellations
         if (!toSchedule.isEmpty()) {
-            Command[] cmds = toSchedule.toArray(new Command[0]);
+            for (int i = 0; i < toSchedule.size(); i++) {
+                Command cmd = toSchedule.get(i);
+                boolean isInterruptible = toScheduleInterruptible.get(i);
+                scheduleWithInterrupt(isInterruptible, cmd);
+            }
             toSchedule.clear();
-            schedule((Object[])cmds);
+            toScheduleInterruptible.clear();
         }
 
         if (!toCancel.isEmpty()) {
@@ -339,7 +402,9 @@ public class CommandScheduler {
         registeredSubsystems.clear();
         defaultCommands.clear();
         toSchedule.clear();
+        toScheduleInterruptible.clear();
         toCancel.clear();
+        interruptibleCommands.clear();
         inRunLoop = false;
     }
 }
