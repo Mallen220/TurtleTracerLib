@@ -1,5 +1,6 @@
 package com.turtletracerlib.command;
 
+import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.Set;
@@ -32,6 +33,9 @@ public class ReflectiveCommandAdapter implements Command {
     private Method endMethod; // end(boolean)
     private Method endNoArgMethod; // end()
     private Method getRequirementsMethod;
+    private Field requirementsField;
+    private Method isInterruptibleMethod;
+    private Field interruptibleField;
 
     /**
      * Creates a new ReflectiveCommandAdapter for the given target object.
@@ -48,12 +52,31 @@ public class ReflectiveCommandAdapter implements Command {
 
         Class<?> clazz = target.getClass();
 
-        try { initializeMethod = clazz.getMethod("initialize"); } catch (NoSuchMethodException ignored) {}
-        try { executeMethod = clazz.getMethod("execute"); } catch (NoSuchMethodException ignored) {}
-        try { isFinishedMethod = clazz.getMethod("isFinished"); } catch (NoSuchMethodException ignored) {}
-        try { endMethod = clazz.getMethod("end", boolean.class); } catch (NoSuchMethodException ignored) {}
-        try { endNoArgMethod = clazz.getMethod("end"); } catch (NoSuchMethodException ignored) {}
+        try { initializeMethod = clazz.getMethod("initialize"); } catch (NoSuchMethodException ignored) {
+            try { initializeMethod = clazz.getMethod("start"); } catch (NoSuchMethodException ignored2) {}
+        }
+        try { executeMethod = clazz.getMethod("execute"); } catch (NoSuchMethodException ignored) {
+            try { executeMethod = clazz.getMethod("update"); } catch (NoSuchMethodException ignored2) {}
+        }
+        try { isFinishedMethod = clazz.getMethod("isFinished"); } catch (NoSuchMethodException ignored) {
+            try { isFinishedMethod = clazz.getMethod("isDone"); } catch (NoSuchMethodException ignored2) {}
+        }
+        try { endMethod = clazz.getMethod("end", boolean.class); } catch (NoSuchMethodException ignored) {
+            try { endMethod = clazz.getMethod("stop", boolean.class); } catch (NoSuchMethodException ignored2) {}
+        }
+        try { endNoArgMethod = clazz.getMethod("end"); } catch (NoSuchMethodException ignored) {
+            try { endNoArgMethod = clazz.getMethod("stop"); } catch (NoSuchMethodException ignored2) {}
+        }
         try { getRequirementsMethod = clazz.getMethod("getRequirements"); } catch (NoSuchMethodException ignored) {}
+        try { requirementsField = clazz.getField("requirements"); } catch (NoSuchFieldException ignored) {
+            try { requirementsField = clazz.getDeclaredField("requirements"); requirementsField.setAccessible(true); } catch (NoSuchFieldException ignored2) {}
+        }
+        try { isInterruptibleMethod = clazz.getMethod("isInterruptible"); } catch (NoSuchMethodException ignored) {
+            try { isInterruptibleMethod = clazz.getMethod("getInterruptible"); } catch (NoSuchMethodException ignored2) {}
+        }
+        try { interruptibleField = clazz.getField("interruptible"); } catch (NoSuchFieldException ignored) {
+            try { interruptibleField = clazz.getDeclaredField("interruptible"); interruptibleField.setAccessible(true); } catch (NoSuchFieldException ignored2) {}
+        }
     }
 
     /**
@@ -139,15 +162,41 @@ public class ReflectiveCommandAdapter implements Command {
             } catch (Exception e) {
                 e.printStackTrace();
             }
+        } else if (requirementsField != null) {
+            try {
+                Object result = requirementsField.get(target);
+                if (result instanceof Set) {
+                    return (Set<Object>) result;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
         return Collections.emptySet();
     }
 
     /**
-     * Returns a string representation of the adapter.
-     *
-     * @return A string identifying the adapted class.
+     * Checks if the target object has an {@code isInterruptible()} method or {@code interruptible} field.
+     * Defaults to true if neither exists.
      */
+    @Override
+    public boolean isInterruptible() {
+        if (isInterruptibleMethod != null) {
+            try {
+                return (boolean) isInterruptibleMethod.invoke(target);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        } else if (interruptibleField != null) {
+            try {
+                return (boolean) interruptibleField.get(target);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        return true;
+    }
+
     @Override
     public String toString() {
         return "Adapter(" + target.getClass().getSimpleName() + ")";

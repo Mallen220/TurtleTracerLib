@@ -4,7 +4,7 @@ junit = "4.13.2"
 androidx-test-ext-junit = "1.1.5"
 espresso-core = "3.5.1"
 ftc-sdk = "11.0.0"
-pedro-pathing = "2.0.0"
+pedro-pathing = "2.1.1"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
