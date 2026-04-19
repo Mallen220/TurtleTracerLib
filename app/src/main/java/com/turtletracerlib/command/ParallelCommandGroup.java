@@ -9,7 +9,9 @@ import java.util.Map;
  * The group ends when all commands in the group have finished.
  * If the group is interrupted, all running commands are interrupted.
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class ParallelCommandGroup extends CommandGroupBase {
 
     /**

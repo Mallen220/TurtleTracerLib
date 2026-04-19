@@ -13,7 +13,9 @@ import java.util.function.BooleanSupplier;
  * This class is the core of the new trigger framework, allowing commands to be scheduled based on
  * complex boolean logic, continuous conditions, and zoned events.
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class Trigger {
     protected final BooleanSupplier condition;
     private boolean previousState = false;

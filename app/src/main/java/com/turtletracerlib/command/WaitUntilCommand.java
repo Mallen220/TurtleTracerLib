@@ -8,7 +8,9 @@ import java.util.function.BooleanSupplier;
  * This is useful for waiting for sensor conditions, such as "wait until limit switch is pressed"
  * or "wait until distance < 10cm".
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class WaitUntilCommand implements Command {
 
     /**

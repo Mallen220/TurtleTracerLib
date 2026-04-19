@@ -12,7 +12,9 @@ package com.turtletracerlib.command;
  * and default commands. However, the {@link CommandScheduler} can manage any object as a subsystem,
  * provided it is registered.
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public interface Subsystem {
     /**
      * This method is called periodically by the {@link CommandScheduler} (typically once per loop iteration).

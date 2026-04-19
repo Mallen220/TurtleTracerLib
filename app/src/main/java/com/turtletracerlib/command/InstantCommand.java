@@ -10,7 +10,9 @@ import java.util.Set;
  * This is useful for one-off actions like setting a servo position, logging a message,
  * or triggering a state change that doesn't need to persist over time.
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class InstantCommand implements Command {
 
     /**

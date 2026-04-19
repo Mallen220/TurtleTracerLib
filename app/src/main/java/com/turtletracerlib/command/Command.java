@@ -19,7 +19,9 @@ import java.util.Set;
  *   <li>{@link #end(boolean)} - Called once when the command finishes or is interrupted.</li>
  * </ol>
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public interface Command {
     /**
      * The initial state of a command. Called once when the command is scheduled.

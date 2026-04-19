@@ -1,5 +1,8 @@
 package com.pedropathing.follower;
 
-/** Minimal stub of Follower for Javadoc generation */
-public interface Follower {}
+import com.pedropathing.geometry.Pose;
 
+/** Minimal stub of Follower for Javadoc generation */
+public interface Follower {
+    Pose getPose();
+}

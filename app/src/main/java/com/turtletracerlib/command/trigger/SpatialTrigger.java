@@ -5,7 +5,9 @@ import com.pedropathing.geometry.Pose;
 
 /**
  * Spatial triggers that activate based on the robot's physical location on the field.
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class SpatialTrigger extends Trigger {
 
     /**

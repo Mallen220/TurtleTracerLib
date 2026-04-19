@@ -10,7 +10,9 @@ import java.util.Set;
  * This is commonly used as a default command for subsystems (e.g., continuously checking joystick input
  * and updating motor power for a drivetrain).
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class RunCommand implements Command {
 
     /**

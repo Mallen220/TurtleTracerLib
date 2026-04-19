@@ -10,7 +10,9 @@ import java.util.List;
  * As each command finishes, the next one is started. The group finishes when the last command
  * in the sequence finishes. If the group is interrupted, the currently running command is interrupted.
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class SequentialCommandGroup extends CommandGroupBase {
 
     /**

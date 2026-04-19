@@ -18,7 +18,9 @@ import java.util.Set;
  * </ul>
  * This allows integrating commands from other libraries or simple objects without implementing the interface directly.
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class ReflectiveCommandAdapter implements Command {
 
     /**

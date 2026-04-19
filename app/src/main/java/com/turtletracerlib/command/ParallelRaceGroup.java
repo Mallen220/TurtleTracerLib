@@ -10,7 +10,9 @@ import java.util.List;
  * This is useful for "race" conditions, such as "drive forward until a sensor is triggered OR time runs out".
  * When the first command finishes, all other running commands are interrupted.
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class ParallelRaceGroup extends CommandGroupBase {
 
     /**

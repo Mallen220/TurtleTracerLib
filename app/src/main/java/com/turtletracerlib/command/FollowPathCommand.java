@@ -33,7 +33,9 @@ import java.util.Set;
  *     .setConstantHeadingInterpolation(Math.toRadians(90));
  * </pre>
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class FollowPathCommand implements Command {
 
     /**
