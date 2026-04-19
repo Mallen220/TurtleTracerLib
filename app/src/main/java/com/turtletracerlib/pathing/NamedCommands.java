@@ -1,8 +1,5 @@
 package com.turtletracerlib.pathing;
 
-import com.turtletracerlib.command.Command;
-import com.turtletracerlib.command.InstantCommand;
-import com.turtletracerlib.command.ReflectiveCommandAdapter;
 import java.util.HashMap;
 import java.util.Map;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
@@ -21,11 +18,11 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
  * <h2>Usage Example:</h2>
  * <pre>{@code
  * // In RobotContainer or Init:
- * NamedCommands.registerCommand("IntakeOn", new IntakeOnCommand());
- * NamedCommands.registerCommand("Shoot", new ShootCommand());
+ * NamedCommands.registerCommand("IntakeOn", () -> intake.on());
+ * NamedCommands.registerCommand("Shoot", () -> shooter.shoot());
  *
  * // In Autonomous execution:
- * NamedCommands.getCommand("IntakeOn").schedule();
+ * NamedCommands.getCommand("IntakeOn").run();
  * }</pre>
  */
 public class NamedCommands {
@@ -33,7 +30,7 @@ public class NamedCommands {
   /**
    * The map storing registered commands, keyed by their unique name.
    */
-  private static final Map<String, Command> commands = new HashMap<>();
+  private static final Map<String, Runnable> commands = new HashMap<>();
 
   /**
    * The map storing descriptions for registered commands, keyed by the command name.
@@ -42,16 +39,12 @@ public class NamedCommands {
 
   /**
    * Registers a command with a specific name.
-   * <p>
-   * The command object can be a {@link Command}, a {@link Runnable} (which is wrapped in an {@link InstantCommand}),
-   * or any other object (which is wrapped in a {@link ReflectiveCommandAdapter}).
-   * </p>
    *
    * @param name    The unique name to register the command under (case-sensitive, trimmed).
    * @param command The command object to register. Must not be null.
    * @throws IllegalArgumentException If the name is null/empty or the command is null.
    */
-  public static void registerCommand(String name, Object command) {
+  public static void registerCommand(String name, Runnable command) {
     if (name == null || name.trim().isEmpty()) {
       throw new IllegalArgumentException("Command name cannot be null or empty");
     }
@@ -60,17 +53,8 @@ public class NamedCommands {
       throw new IllegalArgumentException("Command cannot be null");
     }
 
-    Command convertedCommand;
-    if (command instanceof Command) {
-      convertedCommand = (Command) command;
-    } else if (command instanceof Runnable) {
-      convertedCommand = new InstantCommand((Runnable) command);
-    } else {
-      convertedCommand = new ReflectiveCommandAdapter(command);
-    }
-
     String trimmedName = name.trim();
-    commands.put(trimmedName, convertedCommand);
+    commands.put(trimmedName, command);
     commandDescriptions.put(trimmedName, command.getClass().getSimpleName());
   }
 
@@ -81,7 +65,7 @@ public class NamedCommands {
    * @param command     The command object to register.
    * @param description A human-readable description of what the command does.
    */
-  public static void registerCommand(String name, Object command, String description) {
+  public static void registerCommand(String name, Runnable command, String description) {
     registerCommand(name, command);
     commandDescriptions.put(name.trim(), description);
   }
@@ -90,28 +74,25 @@ public class NamedCommands {
    * Retrieves a registered command by its name.
    * <p>
    * If the command is not found, a warning is printed to the standard error output, and a safe,
-   * no-op {@link InstantCommand} is returned to prevent crashes during execution.
+   * no-op {@link Runnable} is returned to prevent crashes during execution.
    * </p>
    *
    * @param name The name of the command to retrieve.
-   * @return The registered {@link Command}, or a no-op command if not found.
+   * @return The registered {@link Runnable}, or a no-op command if not found.
    * @throws IllegalArgumentException If the provided name is null or empty.
    */
-  public static Command getCommand(String name) {
+  public static Runnable getCommand(String name) {
     if (name == null || name.trim().isEmpty()) {
       throw new IllegalArgumentException("Command name cannot be null or empty");
     }
 
     String trimmedName = name.trim();
-    Command command = commands.get(trimmedName);
+    Runnable command = commands.get(trimmedName);
 
     if (command == null) {
       System.err.println("Warning: No command registered with name: " + trimmedName);
       // Return a safe no-op command instead of null
-      return new InstantCommand(
-          () ->
-              System.out.println(
-                  "Warning: Attempted to execute unregistered command: " + trimmedName));
+      return () -> System.out.println("Warning: Attempted to execute unregistered command: " + trimmedName);
     }
 
     return command;

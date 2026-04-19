@@ -6,5 +6,6 @@ package org.firstinspires.ftc.robotcore.external;
  */
 public interface Telemetry {
     void addData(String caption, Object value);
+    void addLine(String lineCaption);
+    void update();
 }
-

@@ -1,5 +1,5 @@
 package com.pedropathing.paths;
-
-/** Minimal stub of PathChain for Javadoc generation */
-public class PathChain {}
-
+public interface PathChain {
+    int size();
+    Path getPath(int i);
+}

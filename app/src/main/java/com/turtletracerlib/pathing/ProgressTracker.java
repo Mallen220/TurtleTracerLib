@@ -171,7 +171,7 @@ public class ProgressTracker {
       }
       // Execute the named command if it exists
       if (NamedCommands.hasCommand(eventName)) {
-        NamedCommands.getCommand(eventName).schedule();
+        NamedCommands.getCommand(eventName).run();
       }
     }
   }
