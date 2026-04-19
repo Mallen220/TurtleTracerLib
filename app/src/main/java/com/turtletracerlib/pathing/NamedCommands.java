@@ -27,9 +27,7 @@ import org.firstinspires.ftc.robotcore.external.Telemetry;
  * // In Autonomous execution:
  * NamedCommands.getCommand("IntakeOn").schedule();
  * }</pre>
- * @deprecated Marked for removal.
  */
-@Deprecated
 public class NamedCommands {
 
   /**
