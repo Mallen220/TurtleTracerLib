@@ -5,7 +5,9 @@ package com.turtletracerlib.command;
  * <p>
  * This is useful in command sequences where a delay is needed (e.g., waiting for a mechanism to settle).
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class WaitCommand implements Command {
 
     /**

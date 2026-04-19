@@ -21,7 +21,9 @@ import com.turtletracerlib.command.trigger.Trigger;
  * <p>
  * It uses a Singleton pattern, so there is only one scheduler instance per OpMode.
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class CommandScheduler {
 
     /**

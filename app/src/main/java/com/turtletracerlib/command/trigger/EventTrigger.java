@@ -4,7 +4,9 @@ import com.turtletracerlib.pathing.ProgressTracker;
 
 /**
  * A trigger that is active when the robot is within a specific event zone along a path.
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class EventTrigger extends Trigger {
 
     /**

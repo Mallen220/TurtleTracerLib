@@ -6,7 +6,9 @@ import com.pedropathing.geometry.Pose;
 /**
  * A trigger that is active when the robot's heading points towards a specific target point on the field,
  * within a given tolerance.
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public class PointTowardsZoneTrigger extends Trigger {
 
     /**

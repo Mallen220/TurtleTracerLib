@@ -14,7 +14,9 @@ import java.util.Set;
  * This class handles the logic for aggregating requirements from all component commands.
  * If any command within the group requires a subsystem, the entire group requires that subsystem.
  * </p>
+ * @deprecated Marked for removal.
  */
+@Deprecated
 public abstract class CommandGroupBase implements Command {
 
     /**
