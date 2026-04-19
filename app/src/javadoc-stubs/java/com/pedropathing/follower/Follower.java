@@ -1,5 +1,13 @@
 package com.pedropathing.follower;
-
-/** Minimal stub of Follower for Javadoc generation */
-public interface Follower {}
-
+import com.pedropathing.geometry.Pose;
+import com.pedropathing.paths.Path;
+public interface Follower {
+    int getChainIndex();
+    void turnTo(double radians);
+    Pose getPose();
+    boolean isTurning();
+    Path getCurrentPath();
+    double getCurrentTValue();
+    boolean isBusy();
+    void breakFollowing();
+}
