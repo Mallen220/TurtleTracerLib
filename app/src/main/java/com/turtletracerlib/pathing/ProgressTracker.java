@@ -1,14 +1,21 @@
 package com.turtletracerlib.pathing;
 
 import com.pedropathing.follower.Follower;
+import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
-import com.pedropathing.paths.PathChain;
+import com.turtletracerlib.pathing.event.ParametricEvent;
+import com.turtletracerlib.pathing.event.PathEvent;
+import com.turtletracerlib.pathing.event.SpatialEvent;
+import com.turtletracerlib.pathing.event.TemporalEvent;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 
 /**
- * Tracks the progress of a {@link Follower} along a {@link PathChain} or during a turn operation.
+ * Tracks the progress of a {@link Follower} along a {@link Path} or during a turn operation.
  * <p>
  * This class monitors the robot's traversal and triggers registered events at specific points along the path
  * or during a turn. It abstracts the complexity of determining when to execute commands based on position
@@ -23,9 +30,9 @@ public class ProgressTracker {
   private final Follower follower;
 
   /**
-   * The current {@link PathChain} being followed.
+   * The current {@link Path} being followed.
    */
-  private PathChain currentChain;
+  private Path currentPath;
 
   /**
    * A map of event names to their trigger zones.
@@ -38,6 +45,16 @@ public class ProgressTracker {
   private final Map<String, Boolean> eventTriggered = new HashMap<>();
 
   /**
+   * Registered dynamic path events (parametric, temporal, spatial).
+   */
+  private final List<PathEvent> pathEvents = new ArrayList<>();
+
+  /**
+   * Direct actions mapped to named events (e.g. from visualizer event markers).
+   */
+  private final Map<String, Runnable> namedEventActions = new HashMap<>();
+
+  /**
    * The telemetry object used for debugging output.
    */
   private Telemetry telemetry;
@@ -48,12 +65,12 @@ public class ProgressTracker {
   private String currentPathName = "";
 
   /**
-   * The overall progress along the entire {@link PathChain} (0.0 to 1.0).
+   * The overall progress along the entire {@link Path} (0.0 to 1.0).
    */
-  private double chainProgress = 0.0;
+  private double totalProgress = 0.0;
 
   /**
-   * The progress along the current individual {@link Path} within the chain (0.0 to 1.0).
+   * The progress along the current individual {@link Path} segment (0.0 to 1.0).
    */
   private double pathProgress = 0.0;
 
@@ -91,17 +108,16 @@ public class ProgressTracker {
   }
 
   /**
-   * Sets the current {@link PathChain} to track and resets all event triggers.
+   * Sets the current {@link Path} to track and resets all event triggers.
    *
-   * @param chain The new {@link PathChain} to follow.
+   * @param path The new {@link Path} to follow.
    */
-  public void setCurrentChain(PathChain chain) {
-    this.currentChain = chain;
-    clearEvents();
+  public void setCurrentPath(Path path) {
+    this.currentPath = path;
+    resetEvents();
     if (telemetry != null) {
-      telemetry.addData("ProgressTracker", "Set new chain");
-      telemetry.addData("Chain Size", chain.size());
-      telemetry.addData("Current Index", follower.getChainIndex());
+      telemetry.addData("ProgressTracker", "Set new path");
+      telemetry.addData("Current Index", follower.pathIndex());
     }
   }
 
@@ -115,6 +131,111 @@ public class ProgressTracker {
     if (telemetry != null) {
       telemetry.addData("Current Path", name);
     }
+  }
+
+  /**
+   * Registers a callback action to execute when a named event (e.g. from an event marker) triggers.
+   *
+   * @param eventName The name of the event marker.
+   * @param action    The action to execute.
+   * @return This tracker (for chaining).
+   */
+  public ProgressTracker onEvent(String eventName, Runnable action) {
+    namedEventActions.put(eventName, action);
+    return this;
+  }
+
+  /**
+   * Registers an event that triggers when parametric progress reaches a threshold.
+   *
+   * @param progress Threshold (0.0 to 1.0) along the current curve.
+   * @param action   Action to execute.
+   * @return This tracker (for chaining).
+   */
+  public ProgressTracker onParametric(double progress, Runnable action) {
+    return addEvent(new ParametricEvent(this::getPathProgress, progress, action));
+  }
+
+  /**
+   * Registers an event that triggers within a parametric progress range.
+   *
+   * @param startProgress Start threshold (0.0 to 1.0).
+   * @param endProgress   End threshold (0.0 to 1.0).
+   * @param action        Action to execute.
+   * @return This tracker (for chaining).
+   */
+  public ProgressTracker onParametric(double startProgress, double endProgress, Runnable action) {
+    return addEvent(new ParametricEvent(this::getPathProgress, startProgress, endProgress, action));
+  }
+
+  /**
+   * Registers an event that triggers when total path completion reaches a threshold.
+   *
+   * @param completion Threshold (0.0 to 1.0) of overall path completion.
+   * @param action     Action to execute.
+   * @return This tracker (for chaining).
+   */
+  public ProgressTracker onCompletion(double completion, Runnable action) {
+    return addEvent(new ParametricEvent(this::getTotalProgress, completion, action));
+  }
+
+  /**
+   * Registers a temporal event that triggers after a specified duration has elapsed.
+   *
+   * @param durationMs Duration in milliseconds after path start to trigger.
+   * @param action     Action to execute.
+   * @return This tracker (for chaining).
+   */
+  public ProgressTracker onTemporal(long durationMs, Runnable action) {
+    TemporalEvent event = new TemporalEvent(durationMs, action);
+    if (follower.isBusy()) {
+      event.start();
+    }
+    return addEvent(event);
+  }
+
+  /**
+   * Registers a temporal event with a custom {@link TimeUnit}.
+   *
+   * @param duration Duration value.
+   * @param unit     Time unit.
+   * @param action   Action to execute.
+   * @return This tracker (for chaining).
+   */
+  public ProgressTracker onTemporal(long duration, TimeUnit unit, Runnable action) {
+    return onTemporal(unit.toMillis(duration), action);
+  }
+
+  /**
+   * Registers a spatial event that triggers when the robot is within a radius of a target pose.
+   *
+   * @param targetPose Target coordinate on the field.
+   * @param radius     Proximity radius (in inches).
+   * @param action     Action to execute.
+   * @return This tracker (for chaining).
+   */
+  public ProgressTracker onSpatial(Pose targetPose, double radius, Runnable action) {
+    return addEvent(new SpatialEvent(follower::pose, targetPose, radius, action));
+  }
+
+  /**
+   * Adds a custom {@link PathEvent} to this tracker.
+   *
+   * @param event The event to add.
+   * @return This tracker (for chaining).
+   */
+  public ProgressTracker addEvent(PathEvent event) {
+    pathEvents.add(event);
+    return this;
+  }
+
+  /**
+   * Retrieves all dynamic path events registered with this tracker.
+   *
+   * @return The list of path events.
+   */
+  public List<PathEvent> getPathEvents() {
+    return pathEvents;
   }
 
   /**
@@ -149,15 +270,32 @@ public class ProgressTracker {
   public void clearEvents() {
     eventZones.clear();
     eventTriggered.clear();
+    pathEvents.clear();
+    namedEventActions.clear();
     if (telemetry != null) {
       telemetry.addData("ProgressTracker", "Events cleared");
     }
   }
 
   /**
+   * Resets all registered events to allow them to trigger again on subsequent runs.
+   */
+  public void resetEvents() {
+    for (String key : eventZones.keySet()) {
+      eventTriggered.put(key, false);
+    }
+    for (PathEvent event : pathEvents) {
+      event.reset();
+      if (event instanceof TemporalEvent) {
+        ((TemporalEvent) event).start();
+      }
+    }
+  }
+
+  /**
    * Manually triggers an event by name if it hasn't been triggered already.
    * <p>
-   * This executes the command associated with the event name via {@link NamedCommands}.
+   * This executes any bound action or falls back to {@link NamedCommands}.
    * </p>
    *
    * @param eventName The name of the event to execute.
@@ -169,8 +307,13 @@ public class ProgressTracker {
         telemetry.addLine("EVENT TRIGGERED: " + eventName);
         telemetry.update();
       }
-      // Execute the named command if it exists
-      if (NamedCommands.hasCommand(eventName)) {
+      if (namedEventActions.containsKey(eventName)) {
+        try {
+          namedEventActions.get(eventName).run();
+        } catch (Exception e) {
+          System.err.println("Error executing event action for '" + eventName + "': " + e.getMessage());
+        }
+      } else if (NamedCommands.hasCommand(eventName)) {
         NamedCommands.getCommand(eventName).run();
       }
     }
@@ -243,12 +386,12 @@ public class ProgressTracker {
    * @param eventThreshold The percentage (0.0 to 1.0) of the turn completion at which to trigger the event.
    */
   public void turn(double radians, String eventName, double eventThreshold) {
-    follower.turnTo(radians);
-    startHeading = follower.getPose().getHeading();
+    follower.hold(follower.pose().withHeading(radians));
+    startHeading = follower.pose().heading();
     targetHeading = radians;
     totalTurnRadians = Math.abs(getSmallestAngleDifference(targetHeading, startHeading));
     isTrackingTurn = true;
-    clearEvents();
+    resetEvents();
     registerEvent(eventName, eventThreshold);
   }
 
@@ -274,8 +417,8 @@ public class ProgressTracker {
    */
   private void updateProgress() {
     if (isTrackingTurn) {
-      if (follower.isTurning()) {
-        double currentHeading = follower.getPose().getHeading();
+      if (follower.isBusy()) {
+        double currentHeading = follower.pose().heading();
         double remainingRadians = Math.abs(getSmallestAngleDifference(targetHeading, currentHeading));
 
         double progress;
@@ -286,7 +429,7 @@ public class ProgressTracker {
         }
 
         pathProgress = Math.max(0.0, Math.min(1.0, progress));
-        chainProgress = pathProgress; // For turn, chain progress mirrors turn progress
+        totalProgress = pathProgress; // For turn, total progress mirrors turn progress
 
         if (telemetry != null) {
           telemetry.addData("Turn Progress", String.format("%.3f", pathProgress));
@@ -296,36 +439,21 @@ public class ProgressTracker {
         // Turn finished
         isTrackingTurn = false;
         pathProgress = 1.0;
-        chainProgress = 1.0;
+        totalProgress = 1.0;
       }
-    } else if (currentChain != null && follower.getCurrentPath() != null) {
-      // For individual path progress (0 to 1)
-      pathProgress = Math.min(follower.getCurrentTValue(), 1.0);
+    } else if (currentPath != null && follower.currentPath() != null) {
+      // For individual segment progress (0 to 1)
+      pathProgress = Math.max(0.0, Math.min(1.0, follower.parametricCompletion()));
 
-      // For chain progress if multiple paths in chain
-      int currentIndex = follower.getChainIndex();
-      double totalProgress = 0;
-      double currentProgress = 0;
-
-      for (int i = 0; i < currentChain.size(); i++) {
-        Path path = currentChain.getPath(i);
-        if (i < currentIndex) {
-          // Path completed
-          currentProgress += 1.0;
-        } else if (i == currentIndex) {
-          // Current path
-          currentProgress += pathProgress;
-        }
-        totalProgress += 1.0;
-      }
-
-      chainProgress = totalProgress > 0 ? currentProgress / totalProgress : 0.0;
+      // For overall path progress (0 to 1)
+      totalProgress = Math.max(0.0, Math.min(1.0, follower.completion()));
+      int currentIndex = follower.pathIndex();
 
       if (telemetry != null) {
         telemetry.addData("Path Progress", String.format("%.3f", pathProgress));
-        telemetry.addData("Chain Progress", String.format("%.3f", chainProgress));
-        telemetry.addData("Current T Value", follower.getCurrentTValue());
-        telemetry.addData("Chain Index", currentIndex);
+        telemetry.addData("Total Progress", String.format("%.3f", totalProgress));
+        telemetry.addData("Current T Value", follower.parametricCompletion());
+        telemetry.addData("Path Index", currentIndex);
       }
     }
   }
@@ -341,13 +469,53 @@ public class ProgressTracker {
   }
 
   /**
-   * Gets the overall progress of the current path chain.
+   * Gets the overall progress of the current path.
+   *
+   * @return The progress from 0.0 to 1.0.
+   */
+  public double getTotalProgress() {
+    updateProgress();
+    return totalProgress;
+  }
+
+  /**
+   * Gets the overall completion percentage of the current path (0.0 to 1.0).
+   *
+   * @return The completion from 0.0 to 1.0.
+   */
+  public double getCompletion() {
+    return getTotalProgress();
+  }
+
+  /**
+   * Gets the overall progress of the current path.
    *
    * @return The progress from 0.0 to 1.0.
    */
   public double getChainProgress() {
+    return getTotalProgress();
+  }
+
+  /**
+   * Updates progress metrics and executes any registered events whose conditions are met.
+   * <p>
+   * Call this in your main OpMode loop alongside {@link Follower#update()}.
+   * </p>
+   */
+  public void update() {
     updateProgress();
-    return chainProgress;
+
+    // Check zoned / named events
+    for (String eventName : new ArrayList<>(eventZones.keySet())) {
+      if (shouldTriggerEvent(eventName)) {
+        executeEvent(eventName);
+      }
+    }
+
+    // Check dynamic PathEvents
+    for (PathEvent event : pathEvents) {
+      event.update();
+    }
   }
 
   /**
@@ -360,12 +528,19 @@ public class ProgressTracker {
   }
 
   /**
-   * Delegates to {@link Follower#breakFollowing()}.
+   * Delegates to {@link Follower#stop()}.
    * <p>
    * Stops the current path following or turn operation.
    * </p>
    */
   public void breakFollowing() {
-    follower.breakFollowing();
+    follower.stop();
+  }
+
+  /**
+   * Stops the current path following or turn operation.
+   */
+  public void stop() {
+    follower.stop();
   }
 }

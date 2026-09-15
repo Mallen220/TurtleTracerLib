@@ -39,7 +39,7 @@ afterEvaluate {
                 artifactId = "TurtleTracerLib"
                 // Use the project group and version as provided (JitPack sets -Pgroup/-Pversion when invoking)
                 // Attach the AAR produced by the Android library module. The AAR is created by the "assembleRelease" task.
-                val aarFile = file("$buildDir/outputs/aar/${project.name}-release.aar")
+                val aarFile = layout.buildDirectory.file("outputs/aar/${project.name}-release.aar").get().asFile
                 artifact(aarFile) {
                     builtBy(tasks.named("assembleRelease"))
                 }
@@ -93,6 +93,7 @@ afterEvaluate {
         implementation(libs.pedro.pathing)
 
         testImplementation(libs.junit)
+        testCompileOnly(libs.ftc.robotcore)
         androidTestImplementation(libs.androidx.test.ext.junit)
         androidTestImplementation(libs.espresso.core)
 
@@ -116,20 +117,29 @@ afterEvaluate {
 
         // Collect source dirs from the Android main source set
         val sourceDirs = android.sourceSets.getByName("main").java.srcDirs
-        // Also include javadoc-only stubs so Javadoc can resolve external types without resolving full SDKs
-        val javadocStubDir = file("src/javadoc-stubs/java")
-        val allSource = files(sourceDirs).asFileTree.plus(files(javadocStubDir).asFileTree)
-        // Convert to a FileTree to satisfy the Javadoc task's expected type
-        source = allSource
+        source = files(sourceDirs).asFileTree
 
         // Build a classpath with the Android boot classpath and the resolvable javadocDeps
+        // For .aar dependencies (e.g. FTC SDK), extract classes.jar so standard javadoc can read it
         val androidBootClasspath = files(android.bootClasspath)
         val javadocDepsConfig = configurations.getByName("javadocDeps")
-        val javadocDepsFiles = try { files(javadocDepsConfig.resolve()) } catch (e: Exception) { files() }
+        val javadocDepsFiles = files({
+            try {
+                javadocDepsConfig.resolve().flatMap { file ->
+                    if (file.name.endsWith(".aar")) {
+                        project.zipTree(file).filter { it.name == "classes.jar" }.files
+                    } else {
+                        listOf(file)
+                    }
+                }
+            } catch (e: Exception) {
+                emptyList()
+            }
+        })
         classpath = files(androidBootClasspath, javadocDepsFiles)
 
         // Put generated documentation in a predictable location
-        destinationDir = file("$buildDir/docs/javadoc")
+        setDestinationDir(layout.buildDirectory.dir("docs/javadoc").get().asFile)
 
         // Encoding and options to avoid doclint failures on older codebases
         options.encoding = "UTF-8"
@@ -151,6 +161,7 @@ dependencies {
     implementation(libs.pedro.pathing)
 
     testImplementation(libs.junit)
+    testCompileOnly(libs.ftc.robotcore)
     androidTestImplementation(libs.androidx.test.ext.junit)
     androidTestImplementation(libs.espresso.core)
 }

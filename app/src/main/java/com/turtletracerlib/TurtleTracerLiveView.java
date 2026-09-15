@@ -1,7 +1,7 @@
 package com.turtletracerlib;
 
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -123,7 +123,7 @@ public class TurtleTracerLiveView {
      */
     public void setFollower(Follower follower) {
         if (follower != null) {
-            this.poseProvider.set(follower::getPose);
+            this.poseProvider.set(follower::pose);
         } else {
             this.poseProvider.set(null);
         }
@@ -253,7 +253,7 @@ public class TurtleTracerLiveView {
                         if (pose != null) {
                             String json = String.format(Locale.US,
                                     "{\"x\":%.4f, \"y\":%.4f, \"heading\":%.4f}",
-                                    pose.getX(), pose.getY(), pose.getHeading());
+                                    pose.x(), pose.y(), pose.heading());
                             writer.println(json);
                         }
                     } catch (Exception e) {

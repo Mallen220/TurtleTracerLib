@@ -1,7 +1,7 @@
 package com.turtletracerlib.command.trigger;
 
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
 /**
  * Spatial triggers that activate based on the robot's physical location on the field.
@@ -20,8 +20,8 @@ public class SpatialTrigger extends Trigger {
      */
     public static SpatialTrigger nearFieldPosition(Follower follower, Pose targetPose, double radius) {
         return new SpatialTrigger(() -> {
-            Pose currentPose = follower.getPose();
-            double distance = Math.hypot(currentPose.getX() - targetPose.getX(), currentPose.getY() - targetPose.getY());
+            Pose currentPose = follower.pose();
+            double distance = Math.hypot(currentPose.x() - targetPose.x(), currentPose.y() - targetPose.y());
             return distance <= radius;
         });
     }
@@ -36,12 +36,12 @@ public class SpatialTrigger extends Trigger {
      */
     public static SpatialTrigger inFieldArea(Follower follower, Pose minPose, Pose maxPose) {
         return new SpatialTrigger(() -> {
-            Pose currentPose = follower.getPose();
-            double x = currentPose.getX();
-            double y = currentPose.getY();
+            Pose currentPose = follower.pose();
+            double x = currentPose.x();
+            double y = currentPose.y();
 
-            return x >= minPose.getX() && x <= maxPose.getX() &&
-                   y >= minPose.getY() && y <= maxPose.getY();
+            return x >= minPose.x() && x <= maxPose.x() &&
+                   y >= minPose.y() && y <= maxPose.y();
         });
     }
 

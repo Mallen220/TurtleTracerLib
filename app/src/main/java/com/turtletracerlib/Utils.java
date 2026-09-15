@@ -70,7 +70,7 @@ public class Utils {
    * @param rpm The rotational speed in RPM.
    * @return The rotational speed in rad/s.
    */
-  private static double rpmToRadPerSec(double rpm) {
+  public static double rpmToRadPerSec(double rpm) {
     return rpm * (2 * Math.PI / 60);
   }
 }

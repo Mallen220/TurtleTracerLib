@@ -1,6 +1,6 @@
 package com.turtletracerlib;
 
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

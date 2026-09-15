@@ -51,21 +51,51 @@ dependencies {
     implementation 'com.github.Mallen220:TurtleTracerLib:master-SNAPSHOT' // or use a specific tag
 
     // Core Dependencies
-    implementation 'com.pedropathing:ftc:2.0.0'
-    implementation 'org.solverslib:core:0.3.3' // Will be replaced with PedproPathingPlus-specific version in future
-    implementation 'org.solverslib:pedroPathing:0.3.3'
+    implementation 'com.pedropathing:core:3.0.0'
+    implementation 'com.pedropathing:revhub:3.0.0'
 }
 ```
 
 ---
 
-## Upcoming Features
+## Events System
 
-We are working hard to bring you:
+Turtle Tracer provides an intuitive Events system that allows triggering robot mechanism actions during path following—without the need for complex state machines.
 
-- **Direct `.pp` Execution:** Run autonomous routines defined in `.pp` files without writing boilerplate Java code.
-- **Enhanced Command Integration:** Tighter integration with the command-based paradigm.
-- **Improved Documentation:** Comprehensive guides and examples.
+### 1. Using Events with `ProgressTracker` (LinearOpMode)
+```java
+ProgressTracker tracker = new ProgressTracker(follower, telemetry);
+tracker.setCurrentPath(myPath);
+
+// Register events fluently:
+tracker.onParametric(0.75, () -> intake.start())       // 75% along curve
+       .onTemporal(500, () -> arm.lift())              // 500ms after start
+       .onSpatial(targetPose, 2.0, () -> claw.open()); // Within 2" of pose
+
+// In your OpMode loop:
+while (opModeIsActive()) {
+    follower.update();
+    tracker.update(); // Evaluates and executes any triggered events safely
+}
+```
+
+### 2. Using Events with `FollowPathCommand` (Command-Based)
+```java
+Command autoPath = new FollowPathCommand(follower, myPath)
+    .onParametric(0.8, () -> intake.start())
+    .onTemporal(400, () -> arm.toIntake())
+    .onSpatial(depositPose, 1.5, () -> outtake.deposit());
+```
+
+### 3. Binding Events to Visualizer `.turt` Event Markers
+```java
+TurtleTracerReader reader = new TurtleTracerReader("AutoRoutine.turt", hardwareMap.appContext);
+reader.onEvent("IntakeMarker", () -> intake.start())
+      .onEvent("ScoreMarker", () -> outtake.score());
+
+// Registers markers and binds their actions to the tracker automatically:
+reader.registerEvents(tracker);
+```
 
 ---
 

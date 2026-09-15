@@ -4,7 +4,7 @@ junit = "4.13.2"
 androidx-test-ext-junit = "1.1.5"
 espresso-core = "3.5.1"
 ftc-sdk = "11.0.0"
-pedro-pathing = "2.1.1"
+pedro-pathing = "3.0.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -16,7 +16,7 @@ ftc-robotserver = { group = "org.firstinspires.ftc", name = "RobotServer", versi
 ftc-common = { group = "org.firstinspires.ftc", name = "FtcCommon", version.ref = "ftc-sdk" }
 ftc-onbotjava = { group = "org.firstinspires.ftc", name = "OnBotJava", version.ref = "ftc-sdk" }
 ftc-inspection = { group = "org.firstinspires.ftc", name = "Inspection", version.ref = "ftc-sdk" }
-pedro-pathing = { group = "com.github.Pedro-Pathing.PedroPathing", name = "ftc", version.ref = "pedro-pathing" }
+pedro-pathing = { group = "com.pedropathing", name = "core", version.ref = "pedro-pathing" }
 
 [plugins]
 androidLibrary = { id = "com.android.library", version.ref = "agp" }

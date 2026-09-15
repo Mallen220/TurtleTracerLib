@@ -1,37 +1,32 @@
 package com.turtletracerlib.command;
 
+import com.pedropathing.api.Paths;
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Curve;
-import com.pedropathing.geometry.Pose;
-import com.pedropathing.paths.HeadingInterpolator;
+import com.pedropathing.math.Pose;
 import com.pedropathing.paths.Path;
-import com.pedropathing.paths.PathBuilder;
-import com.pedropathing.paths.PathChain;
-import com.pedropathing.paths.PathConstraints;
-import com.pedropathing.paths.callbacks.PathCallback;
+import com.pedropathing.paths.curves.Curve;
+import com.pedropathing.paths.interpolator.Interpolator;
+import com.turtletracerlib.pathing.event.ParametricEvent;
+import com.turtletracerlib.pathing.event.PathEvent;
+import com.turtletracerlib.pathing.event.SpatialEvent;
+import com.turtletracerlib.pathing.event.TemporalEvent;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 /**
- * A Command that commands the Follower to follow a Path or PathChain.
+ * A Command that commands the Follower to follow a Path.
  * <p>
  * This command supports two modes of operation:
- * 1. **Pre-Built:** Pass an existing {@link Path} or {@link PathChain} to the constructor.
+ * 1. **Pre-Built:** Pass an existing {@link Path} to the constructor.
  * 2. **Fluent Builder:** Create a command with just the {@link Follower}, and use the fluent API
- *    (e.g., {@link #curveThrough(double, Pose...)}) to build the path inline.
+ *    (e.g., {@link #curveThrough(Pose...)}) to build the path inline.
  * </p>
  * <p>
- * Example Usage:
- * <pre>
- * // Pre-built
- * new FollowPathCommand(follower, myPathChain);
- *
- * // Fluent Builder
- * new FollowPathCommand(follower)
- *     .curveThrough(0.5, new Pose(10, 10), new Pose(20, 20))
- *     .setConstantHeadingInterpolation(Math.toRadians(90));
- * </pre>
+ * Events can be attached to execute actions at specific progress, time, or spatial coordinates.
  * </p>
  * @deprecated Marked for removal.
  */
@@ -44,78 +39,26 @@ public class FollowPathCommand implements Command {
     private final Follower follower;
 
     /**
-     * The compiled PathChain to follow. This is either provided in the constructor or built by the PathBuilder.
+     * The compiled Path to follow. This is either provided in the constructor or built dynamically.
      */
-    private PathChain pathChain;
+    private Path path;
 
     /**
-     * The builder used for fluent path construction. Null if a pre-built chain is provided.
+     * The list of paths used for fluent path construction.
      */
-    private PathBuilder pathBuilder;
+    private final List<Path> paths = new ArrayList<>();
+
+    /**
+     * The list of events to trigger during path execution.
+     */
+    private final List<PathEvent> events = new ArrayList<>();
 
     /**
      * Whether to hold the position at the end of the path.
      */
     private boolean holdEnd = true;
 
-    /**
-     * The maximum power scaling for the follower (0.0 to 1.0).
-     */
-    private double maxPower = 1.0;
-
-    // --- Constructors for Pre-Built PathChain ---
-
-    /**
-     * Creates a new FollowPathCommand for a pre-built PathChain.
-     *
-     * @param follower  The follower instance.
-     * @param pathChain The PathChain to follow.
-     */
-    public FollowPathCommand(Follower follower, PathChain pathChain) {
-        this.follower = follower;
-        this.pathChain = pathChain;
-    }
-
-    /**
-     * Creates a new FollowPathCommand for a pre-built PathChain with hold-end configuration.
-     *
-     * @param follower  The follower instance.
-     * @param pathChain The PathChain to follow.
-     * @param holdEnd   Whether to hold position at the end of the path.
-     */
-    public FollowPathCommand(Follower follower, PathChain pathChain, boolean holdEnd) {
-        this(follower, pathChain);
-        this.holdEnd = holdEnd;
-    }
-
-    /**
-     * Creates a new FollowPathCommand for a pre-built PathChain with max power configuration.
-     *
-     * @param follower  The follower instance.
-     * @param pathChain The PathChain to follow.
-     * @param maxPower  The maximum power scaling (0.0 to 1.0).
-     */
-    public FollowPathCommand(Follower follower, PathChain pathChain, double maxPower) {
-        this(follower, pathChain);
-        this.maxPower = maxPower;
-    }
-
-    /**
-     * Creates a new FollowPathCommand for a pre-built PathChain with full configuration.
-     *
-     * @param follower  The follower instance.
-     * @param pathChain The PathChain to follow.
-     * @param holdEnd   Whether to hold position at the end of the path.
-     * @param maxPower  The maximum power scaling (0.0 to 1.0).
-     */
-    public FollowPathCommand(Follower follower, PathChain pathChain, boolean holdEnd, double maxPower) {
-        this.follower = follower;
-        this.pathChain = pathChain;
-        this.holdEnd = holdEnd;
-        this.maxPower = maxPower;
-    }
-
-    // --- Constructors for Single Path (auto-converts to PathChain) ---
+    // --- Constructors for Pre-Built Path ---
 
     /**
      * Creates a new FollowPathCommand for a single Path.
@@ -124,7 +67,8 @@ public class FollowPathCommand implements Command {
      * @param path     The Path to follow.
      */
     public FollowPathCommand(Follower follower, Path path) {
-        this(follower, new PathChain(path));
+        this.follower = follower;
+        this.path = path;
     }
 
     /**
@@ -135,30 +79,8 @@ public class FollowPathCommand implements Command {
      * @param holdEnd  Whether to hold position at the end of the path.
      */
     public FollowPathCommand(Follower follower, Path path, boolean holdEnd) {
-        this(follower, new PathChain(path), holdEnd);
-    }
-
-    /**
-     * Creates a new FollowPathCommand for a single Path with max power configuration.
-     *
-     * @param follower The follower instance.
-     * @param path     The Path to follow.
-     * @param maxPower The maximum power scaling (0.0 to 1.0).
-     */
-    public FollowPathCommand(Follower follower, Path path, double maxPower) {
-        this(follower, new PathChain(path), maxPower);
-    }
-
-    /**
-     * Creates a new FollowPathCommand for a single Path with full configuration.
-     *
-     * @param follower The follower instance.
-     * @param path     The Path to follow.
-     * @param holdEnd  Whether to hold position at the end of the path.
-     * @param maxPower The maximum power scaling (0.0 to 1.0).
-     */
-    public FollowPathCommand(Follower follower, Path path, boolean holdEnd, double maxPower) {
-        this(follower, new PathChain(path), holdEnd, maxPower);
+        this(follower, path);
+        this.holdEnd = holdEnd;
     }
 
     // --- Constructor for Fluent Building ---
@@ -167,14 +89,13 @@ public class FollowPathCommand implements Command {
      * Creates a new FollowPathCommand in builder mode.
      * <p>
      * Use methods like {@link #curveThrough(double, Pose...)} to build the path inline.
-     * The {@link PathChain} is constructed when {@link #initialize()} is called.
+     * The {@link Path} is constructed when {@link #initialize()} is called.
      * </p>
      *
      * @param follower The follower instance.
      */
     public FollowPathCommand(Follower follower) {
         this.follower = follower;
-        this.pathBuilder = new PathBuilder(follower);
     }
 
     // --- Configuration Methods ---
@@ -190,92 +111,89 @@ public class FollowPathCommand implements Command {
         return this;
     }
 
-    /**
-     * Sets the maximum power scaling for the follower.
-     *
-     * @param maxPower The maximum power (0.0 to 1.0).
-     * @return This command (for chaining).
-     */
-    public FollowPathCommand setMaxPower(double maxPower) {
-        this.maxPower = maxPower;
-        return this;
-    }
-
-    // --- PathBuilder Delegation Methods ---
+    // --- Fluent Path Construction Methods ---
 
     /**
-     * Ensures that the PathBuilder is initialized.
-     *
-     * @throws IllegalStateException If the command was created with a pre-built PathChain.
-     */
-    private void ensureBuilder() {
-        if (pathBuilder == null) {
-            throw new IllegalStateException("Cannot add path steps to a FollowPathCommand created with a pre-built PathChain.");
-        }
-    }
-
-    /**
-     * Adds a {@link Path} to the chain being built.
+     * Adds a {@link Path} to the path being built.
      *
      * @param path The path to add.
      * @return This command (for chaining).
      */
     public FollowPathCommand addPath(Path path) {
-        ensureBuilder();
-        pathBuilder.addPath(path);
+        paths.add(path);
         return this;
     }
 
     /**
-     * Adds a {@link Curve} (Bezier curve) to the chain being built.
+     * Adds a {@link Curve} to the path being built.
      *
      * @param curve The curve to add.
      * @return This command (for chaining).
      */
     public FollowPathCommand addPath(Curve curve) {
-        ensureBuilder();
-        pathBuilder.addPath(curve);
+        paths.add(Paths.path(curve));
         return this;
     }
 
     /**
-     * Adds multiple {@link Path} objects to the chain being built.
+     * Adds multiple {@link Path} objects to the path being built.
      *
      * @param paths The paths to add.
      * @return This command (for chaining).
      */
     public FollowPathCommand addPaths(Path... paths) {
-        ensureBuilder();
-        pathBuilder.addPaths(paths);
+        Collections.addAll(this.paths, paths);
         return this;
     }
 
     /**
-     * Creates a spline through a set of points and adds it to the chain.
+     * Creates a bezier curve through a set of points and adds it to the path.
      *
-     * @param tension The tension of the spline (typically 0.5).
+     * @param points The control points (poses) for the spline.
+     * @return This command (for chaining).
+     */
+    public FollowPathCommand curveThrough(Pose... points) {
+        paths.add(Paths.through(points));
+        return this;
+    }
+
+    /**
+     * Creates a bezier curve through a set of points and adds it to the path.
+     *
+     * @param tension The tension of the spline (ignored, preserved for API compatibility).
      * @param points  The control points (poses) for the spline.
      * @return This command (for chaining).
      */
     public FollowPathCommand curveThrough(double tension, Pose... points) {
-        ensureBuilder();
-        pathBuilder.curveThrough(tension, points);
-        return this;
+        return curveThrough(points);
     }
 
     /**
-     * Creates a spline through a set of points (with explicit start/prev points) and adds it.
+     * Creates a bezier curve through a set of points (with explicit start/prev points) and adds it.
      *
-     * @param prevPoint  The point preceding the start (for tangent calculation).
+     * @param prevPoint  The point preceding the start (preserved for API compatibility).
      * @param startPoint The starting point of the spline.
-     * @param tension    The tension of the spline.
+     * @param tension    The tension of the spline (preserved for API compatibility).
      * @param points     The subsequent control points.
      * @return This command (for chaining).
      */
     public FollowPathCommand curveThrough(Pose prevPoint, Pose startPoint, double tension, Pose... points) {
-        ensureBuilder();
-        pathBuilder.curveThrough(prevPoint, startPoint, tension, points);
+        Pose[] all = new Pose[points.length + 1];
+        all[0] = startPoint;
+        System.arraycopy(points, 0, all, 1, points.length);
+        paths.add(Paths.through(all));
         return this;
+    }
+
+    private Path getLastPath() {
+        if (paths.isEmpty()) {
+            throw new IllegalStateException("No path segments have been added yet.");
+        }
+        return paths.get(paths.size() - 1);
+    }
+
+    private void updateLastPath(Path updated) {
+        paths.set(paths.size() - 1, updated);
     }
 
     /**
@@ -286,8 +204,7 @@ public class FollowPathCommand implements Command {
      * @return This command (for chaining).
      */
     public FollowPathCommand setLinearHeadingInterpolation(double startHeading, double endHeading) {
-        ensureBuilder();
-        pathBuilder.setLinearHeadingInterpolation(startHeading, endHeading);
+        updateLastPath(getLastPath().linear(startHeading, endHeading));
         return this;
     }
 
@@ -300,8 +217,7 @@ public class FollowPathCommand implements Command {
      * @return This command (for chaining).
      */
     public FollowPathCommand setLinearHeadingInterpolation(double startHeading, double endHeading, double endTime) {
-        ensureBuilder();
-        pathBuilder.setLinearHeadingInterpolation(startHeading, endHeading, endTime);
+        updateLastPath(getLastPath().linear(startHeading, endHeading, endTime));
         return this;
     }
 
@@ -315,8 +231,7 @@ public class FollowPathCommand implements Command {
      * @return This command (for chaining).
      */
     public FollowPathCommand setLinearHeadingInterpolation(double startHeading, double endHeading, double endTime, double startTime) {
-        ensureBuilder();
-        pathBuilder.setLinearHeadingInterpolation(startHeading, endHeading, endTime, startTime);
+        updateLastPath(getLastPath().linear(startHeading, endHeading, endTime));
         return this;
     }
 
@@ -327,8 +242,7 @@ public class FollowPathCommand implements Command {
      * @return This command (for chaining).
      */
     public FollowPathCommand setConstantHeadingInterpolation(double setHeading) {
-        ensureBuilder();
-        pathBuilder.setConstantHeadingInterpolation(setHeading);
+        updateLastPath(getLastPath().constant(setHeading));
         return this;
     }
 
@@ -338,71 +252,98 @@ public class FollowPathCommand implements Command {
      * @return This command (for chaining).
      */
     public FollowPathCommand setTangentHeadingInterpolation() {
-        ensureBuilder();
-        pathBuilder.setTangentHeadingInterpolation();
+        updateLastPath(getLastPath().tangent());
         return this;
     }
 
     /**
      * Sets a custom heading interpolation function for the current path segment.
      *
-     * @param function The custom {@link HeadingInterpolator}.
+     * @param function The custom {@link Interpolator}.
      * @return This command (for chaining).
      */
-    public FollowPathCommand setHeadingInterpolation(HeadingInterpolator function) {
-        ensureBuilder();
-        pathBuilder.setHeadingInterpolation(function);
+    public FollowPathCommand setHeadingInterpolation(Interpolator function) {
+        updateLastPath(getLastPath().heading(function));
         return this;
     }
 
     /**
-     * Sets path constraints (velocity, acceleration) for the current path segment.
+     * Attaches an event that triggers when the parametric completion along the current curve reaches a threshold.
      *
-     * @param constraints The {@link PathConstraints} to apply.
+     * @param progress Progress threshold (0.0 to 1.0).
+     * @param action   The action to execute.
      * @return This command (for chaining).
      */
-    public FollowPathCommand setConstraints(PathConstraints constraints) {
-        ensureBuilder();
-        pathBuilder.setConstraints(constraints);
-        return this;
+    public FollowPathCommand onParametric(double progress, Runnable action) {
+        return addEvent(new ParametricEvent(follower::parametricCompletion, progress, action));
     }
 
     /**
-     * Adds a callback to be executed during the path following.
+     * Attaches an event that triggers within a parametric progress range.
      *
-     * @param callback The {@link PathCallback} to add.
+     * @param startProgress Start progress (0.0 to 1.0).
+     * @param endProgress   End progress (0.0 to 1.0).
+     * @param action        The action to execute.
      * @return This command (for chaining).
      */
-    public FollowPathCommand addCallback(PathCallback callback) {
-        ensureBuilder();
-        pathBuilder.addCallback(callback);
-        return this;
+    public FollowPathCommand onParametric(double startProgress, double endProgress, Runnable action) {
+        return addEvent(new ParametricEvent(follower::parametricCompletion, startProgress, endProgress, action));
     }
 
     /**
-     * Adds a callback triggered at a specific parametric t-value along the path.
+     * Attaches an event that triggers when total path completion reaches a threshold.
      *
-     * @param t        The parametric value (0.0 to 1.0).
-     * @param runnable The action to execute.
+     * @param completion Completion threshold (0.0 to 1.0).
+     * @param action     The action to execute.
      * @return This command (for chaining).
      */
-    public FollowPathCommand addParametricCallback(double t, Runnable runnable) {
-        ensureBuilder();
-        pathBuilder.addParametricCallback(t, runnable);
-        return this;
+    public FollowPathCommand onCompletion(double completion, Runnable action) {
+        return addEvent(new ParametricEvent(follower::completion, completion, action));
     }
 
     /**
-     * Adds a callback triggered at a specific time (in ms?) or duration.
-     * (Note: Check PathBuilder docs for exact unit, assuming normalized or absolute based on implementation).
+     * Attaches a temporal event that triggers after a specified duration from path start.
      *
-     * @param time     The time value.
-     * @param runnable The action to execute.
+     * @param durationMs Duration in milliseconds.
+     * @param action     The action to execute.
      * @return This command (for chaining).
      */
-    public FollowPathCommand addTemporalCallback(double time, Runnable runnable) {
-        ensureBuilder();
-        pathBuilder.addTemporalCallback(time, runnable);
+    public FollowPathCommand onTemporal(long durationMs, Runnable action) {
+        return addEvent(new TemporalEvent(durationMs, action));
+    }
+
+    /**
+     * Attaches a temporal event with custom {@link TimeUnit}.
+     *
+     * @param duration Time value.
+     * @param unit     Time unit.
+     * @param action   The action to execute.
+     * @return This command (for chaining).
+     */
+    public FollowPathCommand onTemporal(long duration, TimeUnit unit, Runnable action) {
+        return onTemporal(unit.toMillis(duration), action);
+    }
+
+    /**
+     * Attaches a spatial event that triggers when the robot is within a radius of a target pose.
+     *
+     * @param targetPose Target coordinates.
+     * @param radius     Proximity radius (in inches).
+     * @param action     The action to execute.
+     * @return This command (for chaining).
+     */
+    public FollowPathCommand onSpatial(Pose targetPose, double radius, Runnable action) {
+        return addEvent(new SpatialEvent(follower::pose, targetPose, radius, action));
+    }
+
+    /**
+     * Adds a custom {@link PathEvent} to this command.
+     *
+     * @param event The event to add.
+     * @return This command (for chaining).
+     */
+    public FollowPathCommand addEvent(PathEvent event) {
+        events.add(event);
         return this;
     }
 
@@ -411,33 +352,37 @@ public class FollowPathCommand implements Command {
     /**
      * Initializes the path following.
      * <p>
-     * If using the builder mode, the PathChain is built here.
-     * Then, the follower is instructed to follow the path.
+     * If using the builder mode, the Path is built here.
+     * Then, the follower is instructed to follow the path, and events are initialized.
      * </p>
      */
     @Override
     public void initialize() {
-        if (pathChain == null) {
-            if (pathBuilder != null) {
-                // Build the chain on first run
-                pathChain = pathBuilder.build();
+        if (path == null) {
+            if (!paths.isEmpty()) {
+                path = paths.size() == 1 ? paths.get(0) : Paths.path(paths.toArray(new Path[0]));
             } else {
-                throw new IllegalStateException("No PathChain provided or built.");
+                throw new IllegalStateException("No Path provided or built.");
             }
         }
-        follower.followPath(pathChain, maxPower, holdEnd);
+        for (PathEvent event : events) {
+            event.reset();
+            if (event instanceof TemporalEvent) {
+                ((TemporalEvent) event).start();
+            }
+        }
+        follower.holdEnd.set(holdEnd);
+        follower.follow(path);
     }
 
     /**
-     * Executes the command.
-     * <p>
-     * The follower update is typically handled by the main OpMode loop, so this method is empty.
-     * </p>
+     * Executes the command, evaluating and triggering any active events.
      */
     @Override
     public void execute() {
-        // No-op: Follower update is typically handled by the OpMode loop.
-        // If specific telemetry is needed, it can be added here.
+        for (PathEvent event : events) {
+            event.update();
+        }
     }
 
     /**
@@ -453,7 +398,7 @@ public class FollowPathCommand implements Command {
     /**
      * Ends the path following.
      * <p>
-     * If interrupted, the follower is commanded to break following.
+     * If interrupted, the follower is stopped.
      * </p>
      *
      * @param interrupted whether the command was interrupted.
@@ -461,7 +406,7 @@ public class FollowPathCommand implements Command {
     @Override
     public void end(boolean interrupted) {
         if (interrupted) {
-            follower.breakFollowing();
+            follower.stop();
         }
     }
 

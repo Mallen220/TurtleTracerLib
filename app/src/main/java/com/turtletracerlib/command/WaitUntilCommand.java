@@ -6,7 +6,7 @@ import java.util.function.BooleanSupplier;
  * A command that runs indefinitely until a specified condition becomes true.
  * <p>
  * This is useful for waiting for sensor conditions, such as "wait until limit switch is pressed"
- * or "wait until distance < 10cm".
+ * or "wait until distance &lt; 10cm".
  * </p>
  * @deprecated Marked for removal.
  */

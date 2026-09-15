@@ -1,7 +1,7 @@
 package com.turtletracerlib.command.trigger;
 
 import com.pedropathing.follower.Follower;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 
 /**
  * A trigger that is active when the robot's heading points towards a specific target point on the field,
@@ -20,9 +20,9 @@ public class PointTowardsZoneTrigger extends Trigger {
      */
     public PointTowardsZoneTrigger(Follower follower, Pose targetPoint, double toleranceRadians) {
         super(() -> {
-            Pose currentPose = follower.getPose();
-            double targetAngle = Math.atan2(targetPoint.getY() - currentPose.getY(), targetPoint.getX() - currentPose.getX());
-            double currentAngle = currentPose.getHeading();
+            Pose currentPose = follower.pose();
+            double targetAngle = Math.atan2(targetPoint.y() - currentPose.y(), targetPoint.x() - currentPose.x());
+            double currentAngle = currentPose.heading();
 
             // Normalize angles to be between -PI and PI to find the shortest distance
             double angleDifference = Math.abs(normalizeAngle(targetAngle - currentAngle));

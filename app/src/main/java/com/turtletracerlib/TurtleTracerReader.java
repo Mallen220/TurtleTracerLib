@@ -3,7 +3,7 @@ package com.turtletracerlib;
 import android.content.Context;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.pedropathing.geometry.Pose;
+import com.pedropathing.math.Pose;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -36,6 +36,11 @@ public final class TurtleTracerReader {
    * A map storing the parsed poses, keyed by their name (with spaces removed).
    */
   private final Map<String, Pose> poses = new HashMap<>();
+
+  /**
+   * A map storing action bindings for event marker names.
+   */
+  private final Map<String, Runnable> boundActions = new HashMap<>();
 
   /**
    * The last recorded X coordinate during parsing, used for relative calculations
@@ -135,13 +140,36 @@ public final class TurtleTracerReader {
   }
 
   /**
+   * Binds an action to an event marker name.
+   *
+   * @param markerName The name of the event marker from the visualizer.
+   * @param action     The action to execute when this marker triggers.
+   * @return This reader (for chaining).
+   */
+  public TurtleTracerReader onEvent(String markerName, Runnable action) {
+    boundActions.put(markerName, action);
+    return this;
+  }
+
+  /**
+   * Alias for {@link #onEvent(String, Runnable)}.
+   *
+   * @param markerName The name of the event marker.
+   * @param action     The action to execute.
+   * @return This reader (for chaining).
+   */
+  public TurtleTracerReader bindEvent(String markerName, Runnable action) {
+    return onEvent(markerName, action);
+  }
+
+  /**
    * Registers all event markers parsed from the JSON file to the provided
    * {@link ProgressTracker}.
    * <p>
    * Iterates through all lines and their associated event markers. If a marker
    * has a single point,
    * it registers a single point event. If it has two points, it registers a zoned
-   * event.
+   * event. Also binds any actions registered via {@link #onEvent(String, Runnable)}.
    * </p>
    *
    * @param tracker The {@link ProgressTracker} to register the events to.
@@ -149,6 +177,11 @@ public final class TurtleTracerReader {
   public void registerEvents(ProgressTracker tracker) {
     if (file == null || file.lines == null)
       return;
+
+    // Transfer all bound actions to the tracker
+    for (Map.Entry<String, Runnable> entry : boundActions.entrySet()) {
+      tracker.onEvent(entry.getKey(), entry.getValue());
+    }
 
     for (TurtleTurt.Line line : file.lines) {
       if (line.eventMarkers != null) {
