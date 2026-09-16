@@ -4,25 +4,27 @@ import android.content.Context;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.pedropathing.math.Pose;
+import com.turtletracerlib.pathing.NamedCommands;
+import com.turtletracerlib.pathing.ProgressTracker;
+
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringReader;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.turtletracerlib.pathing.ProgressTracker;
-
 /**
- * A utility class for reading and parsing Turtle Tracer (.turt) files from the
- * Android assets directory.
+ * A utility class for reading and parsing Turtle Tracer (.turt) files.
  * <p>
  * This class handles the deserialization of the JSON-based path files and
- * converts the coordinate system
- * used in the visualizer to the robot's coordinate system (Pose). It caches the
- * parsed poses for quick retrieval
- * by name.
+ * converts the coordinate system used in the visualizer to the robot's coordinate system (Pose).
+ * It supports extracting start poses, waypoint poses, Bézier control points, shapes, sequence items,
+ * and binding/registering all event marker types (parametric, temporal, pose/spatial) to a {@link ProgressTracker}.
  * </p>
  */
 public final class TurtleTracerReader {
@@ -43,100 +45,167 @@ public final class TurtleTracerReader {
   private final Map<String, Runnable> boundActions = new HashMap<>();
 
   /**
-   * The last recorded X coordinate during parsing, used for relative calculations
-   * or heading extraction.
+   * The last recorded X coordinate during parsing.
    */
   private double lastX;
 
   /**
-   * The last recorded Y coordinate during parsing, used for relative calculations
-   * or heading extraction.
+   * The last recorded Y coordinate during parsing.
    */
   private double lastY;
 
   /**
-   * The last recorded heading (in degrees) during parsing, used when no new
-   * heading is specified.
+   * The last recorded heading (in degrees) during parsing.
    */
   private double lastDeg;
 
   /**
-   * Constructs a new {@code TurtleTracerReader} and loads the specified path
-   * file.
+   * Constructs a new {@code TurtleTracerReader} from an assets file.
    *
-   * @param filename The name of the .turt file to load (relative to the
-   *                 "AutoPaths"
-   *                 folder in assets).
+   * @param filename The name of the .turt file (relative to the "AutoPaths" folder in assets).
    * @param context  The Android context used to access the assets manager.
-   * @throws IOException If the file cannot be found or an error occurs during
-   *                     reading.
+   * @throws IOException If the file cannot be found or an error occurs during reading.
    */
   public TurtleTracerReader(String filename, Context context) throws IOException {
-    InputStream stream = null;
-    try {
-      stream = context.getAssets().open("AutoPaths/" + filename);
-    } catch (IOException e) {
-      throw e;
-    }
-
+    InputStream stream = context.getAssets().open("AutoPaths/" + filename);
     if (stream == null) {
       throw new FileNotFoundException("Turt File not found: " + filename);
     }
-
     Gson gson = new GsonBuilder().create();
     try (InputStreamReader reader = new InputStreamReader(stream)) {
       this.file = gson.fromJson(reader, TurtleTurt.class);
     }
-
     loadAllPoints();
   }
 
   /**
-   * Retrieves the raw list of line segments parsed from the JSON.
-   * This is useful for building autonomous routines that need to process lines
-   * and their event markers.
+   * Constructs a new {@code TurtleTracerReader} from an {@link InputStream}.
    *
-   * @return The list of line segments.
+   * @param stream The input stream containing the .turt JSON data.
+   * @throws IOException If an error occurs reading the stream.
    */
-  public List<TurtleTurt.Line> getLines() {
-    return file.lines;
+  public TurtleTracerReader(InputStream stream) throws IOException {
+    if (stream == null) {
+      throw new IllegalArgumentException("InputStream cannot be null");
+    }
+    Gson gson = new GsonBuilder().create();
+    try (InputStreamReader reader = new InputStreamReader(stream)) {
+      this.file = gson.fromJson(reader, TurtleTurt.class);
+    }
+    loadAllPoints();
   }
 
   /**
-   * Processes the raw data from the {@code TurtleTurt} object and populates the
-   * {@code poses} map.
-   * <p>
-   * This method iterates through the start point and all lines defined in the
-   * file, converting
-   * coordinates and calculating headings as necessary.
-   * </p>
+   * Constructs a new {@code TurtleTracerReader} from a {@link Reader}.
+   *
+   * @param reader The reader containing the .turt JSON data.
    */
-  private void loadAllPoints() {
-    double x = file.startPoint.x;
-    double y = file.startPoint.y;
-    double deg = file.startPoint.startDeg;
-    if (Double.isNaN(deg))
-      deg = 0;
-
-    lastX = x;
-    lastY = y;
-    lastDeg = deg;
-
-    poses.put("startPoint", toPose(lastX, lastY, lastDeg));
-
-    for (TurtleTurt.Line line : file.lines) {
-      double lx = line.endPoint.x;
-      double ly = line.endPoint.y;
-
-      double heading = extractHeading(line.endPoint.heading, lastX, lastY, lx, ly, lastDeg);
-
-      String name = line.name.replace(" ", "");
-      poses.put(name, toPose(lx, ly, heading));
-
-      lastX = lx;
-      lastY = ly;
-      lastDeg = heading;
+  public TurtleTracerReader(Reader reader) {
+    if (reader == null) {
+      throw new IllegalArgumentException("Reader cannot be null");
     }
+    Gson gson = new GsonBuilder().create();
+    this.file = gson.fromJson(reader, TurtleTurt.class);
+    loadAllPoints();
+  }
+
+  /**
+   * Constructs a new {@code TurtleTracerReader} from a raw JSON string.
+   *
+   * @param jsonContent The JSON content string of the .turt file.
+   */
+  public TurtleTracerReader(String jsonContent) {
+    this(new StringReader(jsonContent));
+  }
+
+  /**
+   * Retrieves the version of the Turtle Tracer file format.
+   *
+   * @return Version string (e.g. "2.2.1").
+   */
+  public String getVersion() {
+    return file != null ? file.version : "";
+  }
+
+  /**
+   * Retrieves the file header metadata.
+   *
+   * @return The header metadata.
+   */
+  public TurtleTurt.Header getHeader() {
+    return file != null ? file.header : null;
+  }
+
+  /**
+   * Retrieves the start point definition.
+   *
+   * @return The start point.
+   */
+  public TurtleTurt.StartPoint getStartPoint() {
+    return file != null ? file.startPoint : null;
+  }
+
+  /**
+   * Retrieves the raw list of line segments parsed from the JSON.
+   *
+   * @return The list of line segments, or empty list if none.
+   */
+  public List<TurtleTurt.Line> getLines() {
+    return file != null && file.lines != null ? file.lines : Collections.emptyList();
+  }
+
+  /**
+   * Retrieves the sequence of autonomous steps (paths, waits, rotations) defined in the file.
+   *
+   * @return The sequence items list.
+   */
+  public List<TurtleTurt.SequenceItem> getSequence() {
+    return file != null && file.sequence != null ? file.sequence : Collections.emptyList();
+  }
+
+  /**
+   * Retrieves the field shapes/obstacles parsed from the JSON.
+   *
+   * @return The list of shapes.
+   */
+  public List<TurtleTurt.Shape> getShapes() {
+    return file != null && file.shapes != null ? file.shapes : Collections.emptyList();
+  }
+
+  /**
+   * Retrieves arbitrary extra metadata defined in the file.
+   *
+   * @return Map of extra data properties.
+   */
+  public Map<String, Object> getExtraData() {
+    return file != null && file.extraData != null ? file.extraData : Collections.emptyMap();
+  }
+
+  /**
+   * Retrieves all parsed poses by their name.
+   *
+   * @return An unmodifiable view of all poses.
+   */
+  public Map<String, Pose> getAllPoses() {
+    return Collections.unmodifiableMap(poses);
+  }
+
+  /**
+   * Retrieves a parsed {@link Pose} by its name.
+   * <p>
+   * Supported names include:
+   * <ul>
+   *   <li>{@code "startPoint"} - The starting pose.</li>
+   *   <li>Segment names (e.g., {@code "DriveToShoot"}, {@code "dave"}).</li>
+   *   <li>Bézier control points (e.g., {@code "greg_control1"}, {@code "geerger_control2"}).</li>
+   * </ul>
+   * </p>
+   *
+   * @param name The name of the point or control point.
+   * @return The corresponding {@link Pose}, or {@code null} if not found.
+   */
+  public Pose get(String name) {
+    return poses.get(name);
   }
 
   /**
@@ -163,35 +232,46 @@ public final class TurtleTracerReader {
   }
 
   /**
-   * Registers all event markers parsed from the JSON file to the provided
-   * {@link ProgressTracker}.
+   * Registers all event markers parsed from the JSON file to the provided {@link ProgressTracker}.
    * <p>
-   * Iterates through all lines and their associated event markers. If a marker
-   * has a single point,
-   * it registers a single point event. If it has two points, it registers a zoned
-   * event. Also binds any actions registered via {@link #onEvent(String, Runnable)}.
+   * Automatically parses the event marker's {@code type}:
+   * <ul>
+   *   <li><b>parametric:</b> Registers progress thresholds ($t$-values) via {@link ProgressTracker#onParametric}.</li>
+   *   <li><b>temporal:</b> Registers timer delays (in milliseconds) via {@link ProgressTracker#onTemporal}.</li>
+   *   <li><b>pose / spatial:</b> Converts $(x, y)$ coordinates to field {@link Pose} and registers proximity triggers via {@link ProgressTracker#onSpatial}.</li>
+   * </ul>
+   * If an action was bound via {@link #onEvent(String, Runnable)}, it is linked directly; otherwise, it resolves dynamically via {@link NamedCommands}.
    * </p>
    *
    * @param tracker The {@link ProgressTracker} to register the events to.
    */
   public void registerEvents(ProgressTracker tracker) {
-    if (file == null || file.lines == null)
+    if (file == null || tracker == null) {
       return;
+    }
 
     // Transfer all bound actions to the tracker
     for (Map.Entry<String, Runnable> entry : boundActions.entrySet()) {
       tracker.onEvent(entry.getKey(), entry.getValue());
     }
 
-    for (TurtleTurt.Line line : file.lines) {
-      if (line.eventMarkers != null) {
-        for (TurtleTurt.EventMarker marker : line.eventMarkers) {
-          if (marker.points != null && marker.points.length > 0) {
-            if (marker.points.length == 1) {
-              tracker.registerEvent(marker.name, marker.points[0]);
-            } else if (marker.points.length >= 2) {
-              tracker.registerEvent(marker.name, marker.points[0], marker.points[1]);
-            }
+    // Register event markers on path lines
+    if (file.lines != null) {
+      for (TurtleTurt.Line line : file.lines) {
+        if (line.eventMarkers != null) {
+          for (TurtleTurt.EventMarker marker : line.eventMarkers) {
+            registerSingleMarker(tracker, marker);
+          }
+        }
+      }
+    }
+
+    // Register event markers on sequence items (waits, rotations, etc.)
+    if (file.sequence != null) {
+      for (TurtleTurt.SequenceItem item : file.sequence) {
+        if (item.eventMarkers != null) {
+          for (TurtleTurt.EventMarker marker : item.eventMarkers) {
+            registerSingleMarker(tracker, marker);
           }
         }
       }
@@ -199,25 +279,113 @@ public final class TurtleTracerReader {
   }
 
   /**
-   * Retrieves a parsed {@link Pose} by its name.
+   * Registers a single event marker with the tracker according to its type.
    *
-   * @param name The name of the point or line (e.g., "startPoint", "spikeMark").
-   * @return The corresponding {@link Pose}, or {@code null} if not found.
+   * @param tracker The progress tracker.
+   * @param marker  The event marker definition.
    */
-  public Pose get(String name) {
-    return poses.get(name);
+  private void registerSingleMarker(ProgressTracker tracker, TurtleTurt.EventMarker marker) {
+    if (marker == null || marker.name == null) {
+      return;
+    }
+
+    Runnable action = boundActions.getOrDefault(marker.name, () -> {
+      if (NamedCommands.hasCommand(marker.name)) {
+        NamedCommands.getCommand(marker.name).run();
+      }
+    });
+
+    String type = marker.type != null ? marker.type.toLowerCase().trim() : "parametric";
+
+    switch (type) {
+      case "temporal":
+        long timeMs = marker.time > 0 ? marker.time : marker.endTime;
+        tracker.onTemporal(timeMs, action);
+        break;
+
+      case "pose":
+      case "spatial":
+        Pose targetPose = toPose(marker.poseX, marker.poseY, marker.poseHeading);
+        tracker.onSpatial(targetPose, 2.0, action);
+        break;
+
+      case "parametric":
+      default:
+        if (marker.points != null && marker.points.length > 0) {
+          if (marker.points.length == 1) {
+            tracker.onParametric(marker.points[0], action);
+            tracker.registerEvent(marker.name, marker.points[0]);
+          } else {
+            tracker.onParametric(marker.points[0], marker.points[1], action);
+            tracker.registerEvent(marker.name, marker.points[0], marker.points[1]);
+          }
+        } else {
+          tracker.onParametric(marker.position, action);
+          tracker.registerEvent(marker.name, marker.position);
+        }
+        break;
+    }
+  }
+
+  /**
+   * Processes the raw data from the {@code TurtleTurt} object and populates the {@code poses} map.
+   */
+  private void loadAllPoints() {
+    if (file == null) {
+      return;
+    }
+
+    if (file.startPoint != null) {
+      double x = file.startPoint.x;
+      double y = file.startPoint.y;
+      double deg = file.startPoint.startDeg;
+      if (Double.isNaN(deg)) deg = 0;
+
+      lastX = x;
+      lastY = y;
+      lastDeg = deg;
+
+      poses.put("startPoint", toPose(lastX, lastY, lastDeg));
+    }
+
+    if (file.lines != null) {
+      for (int lineIdx = 0; lineIdx < file.lines.size(); lineIdx++) {
+        TurtleTurt.Line line = file.lines.get(lineIdx);
+        if (line.endPoint != null) {
+          double lx = line.endPoint.x;
+          double ly = line.endPoint.y;
+
+          double heading = extractHeading(line.endPoint.heading, lastX, lastY, lx, ly, lastDeg);
+
+          String name = line.name != null ? line.name.replace(" ", "") : "line" + lineIdx;
+          poses.put(name, toPose(lx, ly, heading));
+
+          // Parse and populate Bézier control points
+          if (line.controlPoints != null) {
+            for (int cpIdx = 0; cpIdx < line.controlPoints.size(); cpIdx++) {
+              TurtleTurt.ControlPoint cp = line.controlPoints.get(cpIdx);
+              Pose cpPose = toPose(cp.x, cp.y, 0);
+              poses.put(name + "_control" + (cpIdx + 1), cpPose);
+              poses.put(name + "_line" + lineIdx + "_control" + (cpIdx + 1), cpPose);
+            }
+          }
+
+          lastX = lx;
+          lastY = ly;
+          lastDeg = heading;
+        }
+      }
+    }
   }
 
   /**
    * Converts the visualizer's coordinate system to the robot's {@link Pose}.
    * <p>
-   * The visualizer typically uses a different coordinate frame (e.g., origin
-   * top-left vs center).
-   * This method applies the necessary transformations:
+   * Transformations:
    * <ul>
-   * <li>Swaps X and Y.</li>
-   * <li>Inverts X (144 - x).</li>
-   * <li>Adjusts heading by -90 degrees and converts to radians.</li>
+   *   <li>Swaps X and Y: {@code newX = visualizerY}.</li>
+   *   <li>Inverts X: {@code newY = 144 - visualizerX}.</li>
+   *   <li>Adjusts heading: {@code radians = Math.toRadians(deg - 90)}.</li>
    * </ul>
    * </p>
    *
@@ -226,24 +394,29 @@ public final class TurtleTracerReader {
    * @param deg The heading in degrees from the visualizer.
    * @return The converted {@link Pose}.
    */
-  private static Pose toPose(double x, double y, double deg) {
+  public static Pose toPose(double x, double y, double deg) {
     return new Pose(y, 144 - x, Math.toRadians(deg - 90));
   }
 
   /**
-   * Calculates the heading for a point based on the specified mode and previous
-   * coordinates.
+   * Converts visualizer coordinates to robot {@link Pose} with 0 heading.
    *
-   * @param mode    The heading mode ("linear", "tangential", or others).
-   * @param lastX   The X coordinate of the previous point.
-   * @param lastY   The Y coordinate of the previous point.
-   * @param x       The X coordinate of the current point.
-   * @param y       The Y coordinate of the current point.
-   * @param lastDeg The heading of the previous point.
-   * @return The calculated heading in degrees.
+   * @param x The X coordinate from the visualizer.
+   * @param y The Y coordinate from the visualizer.
+   * @return The converted {@link Pose}.
+   */
+  public static Pose toPose(double x, double y) {
+    return toPose(x, y, 0);
+  }
+
+  /**
+   * Calculates the heading for a point based on the specified mode and previous coordinates.
    */
   private static double extractHeading(
       String mode, double lastX, double lastY, double x, double y, double lastDeg) {
+    if (mode == null) {
+      return lastDeg;
+    }
     double dx = x - lastX;
     double dy = y - lastY;
 
@@ -253,91 +426,131 @@ public final class TurtleTracerReader {
 
     double linearDeg = Math.toDegrees(Math.atan2(dy, dx));
 
-    if (mode.equals("linear"))
+    if (mode.equals("linear") || mode.equals("tangential")) {
       return linearDeg;
-    if (mode.equals("tangential"))
-      return linearDeg;
+    }
 
     return lastDeg;
   }
-}
 
-///////////////////////////////////////////////////////////////////////////
-/// ///
-/// TURTLE TRACER FILE DEFINITIONS ///
-/// ///
-///////////////////////////////////////////////////////////////////////////
-
-/**
- * Represents the root structure of a Turtle Tracer (.turt) JSON file.
- * <p>
- * This class matches the JSON schema expected by the parser.
- * </p>
- */
-class TurtleTurt {
+  ///////////////////////////////////////////////////////////////////////////
+  /// TURTLE TRACER FILE DEFINITIONS
+  ///////////////////////////////////////////////////////////////////////////
 
   /**
-   * The starting point of the path.
+   * Represents the root structure of a Turtle Tracer (.turt) JSON file.
    */
-  public StartPoint startPoint;
+  public static class TurtleTurt {
+    public String version;
+    public Header header;
+    public StartPoint startPoint;
+    public List<Line> lines;
+    public List<SequenceItem> sequence;
+    public List<Shape> shapes;
+    public Map<String, Object> extraData;
 
-  /**
-   * A list of lines (path segments) following the start point.
-   */
-  public List<Line> lines;
+    public static class Header {
+      public String info;
+      public String copyright;
+      public String link;
+    }
 
-  /**
-   * Represents the start point definition in the JSON file.
-   */
-  public static class StartPoint {
-    /** The X coordinate of the start point. */
-    public double x;
-    /** The Y coordinate of the start point. */
-    public double y;
-    /** The heading string description (unused in logic but present in JSON). */
-    public String heading;
-    /** The starting heading in degrees. */
-    public double startDeg;
-    /** The ending heading in degrees (unused in start point logic typically). */
-    public double endDeg;
-  }
+    public static class StartPoint {
+      public double x;
+      public double y;
+      public String heading;
+      public boolean locked;
+      public double startDeg;
+      public double endDeg;
+    }
 
-  /**
-   * Represents a line segment definition in the JSON file.
-   */
-  public static class Line {
-    /** The name of the line segment (e.g., "scorePreload"). */
-    public String name;
-    /** The endpoint definition of this line segment. */
-    public EndPoint endPoint;
-    /** The event markers associated with this line segment. */
-    public List<EventMarker> eventMarkers;
-  }
+    public static class Line {
+      public String id;
+      public String name;
+      public EndPoint endPoint;
+      public List<ControlPoint> controlPoints;
+      public String color;
+      public List<EventMarker> eventMarkers;
+      public boolean locked;
+      public long waitBeforeMs;
+      public long waitAfterMs;
+      public String waitBeforeName;
+      public String waitAfterName;
+      public boolean hidden;
+      public boolean isChain;
+      public String globalHeading;
+      public double globalStartDeg;
+      public double globalEndDeg;
+    }
 
-  /**
-   * Represents an event marker in the JSON file.
-   */
-  public static class EventMarker {
-    /** The name of the event marker. */
-    public String name;
-    /**
-     * The points defining the event marker zone. Single value for point, two for
-     * zone.
-     */
-    public double[] points;
-  }
+    public static class EndPoint {
+      public double x;
+      public double y;
+      public String heading;
+      public boolean reverse;
+      public double startDeg;
+      public double endDeg;
+      public double degrees;
+      public double targetX;
+      public double targetY;
+      public List<Segment> segments;
+    }
 
-  /**
-   * Represents the endpoint of a line segment in the JSON file.
-   */
-  public static class EndPoint {
-    /** The X coordinate of the endpoint. */
-    public double x;
-    /** The Y coordinate of the endpoint. */
-    public double y;
-    /** The heading mode or value string (e.g., "tangential", "linear"). */
-    public String heading;
-    /** Whether the segment is traversed in reverse. */
-    public boolean reverse;
+    public static class Segment {
+      public double tStart;
+      public double tEnd;
+      public String heading;
+      public boolean reverse;
+      public double startDeg;
+      public double endDeg;
+      public double targetX;
+      public double targetY;
+      public double degrees;
+    }
+
+    public static class ControlPoint {
+      public double x;
+      public double y;
+    }
+
+    public static class EventMarker {
+      public String id;
+      public String name;
+      public String type; // "parametric", "temporal", "pose"
+      public double position;
+      public double[] points; // for backwards compatibility
+      public long time;
+      public long endTime;
+      public double poseX;
+      public double poseY;
+      public double poseHeading;
+      public int lineIndex;
+    }
+
+    public static class SequenceItem {
+      public String kind; // "path", "wait", "rotate"
+      public String id;
+      public String lineId;
+      public String name;
+      public boolean isChain;
+      public long durationMs;
+      public double degrees;
+      public boolean locked;
+      public List<EventMarker> eventMarkers;
+    }
+
+    public static class Shape {
+      public String id;
+      public String name;
+      public String type; // e.g. "obstacle"
+      public String color;
+      public String fillColor;
+      public List<Vertex> vertices;
+    }
+
+    public static class Vertex {
+      public double x;
+      public double y;
+    }
   }
 }

@@ -18,7 +18,11 @@
   - Added [`SpatialEvent`](file:///Users/matthew/Documents/GitHub/TurtleTracerLib/app/src/main/java/com/turtletracerlib/pathing/event/SpatialEvent.java) for triggering actions when within a radius of a target pose.
   - Integrated fluent event registration methods into [`ProgressTracker`](file:///Users/matthew/Documents/GitHub/TurtleTracerLib/app/src/main/java/com/turtletracerlib/pathing/ProgressTracker.java) (`onParametric`, `onCompletion`, `onTemporal`, `onSpatial`, `onEvent`) and added `tracker.update()`.
   - Integrated fluent event registration and execution into [`FollowPathCommand`](file:///Users/matthew/Documents/GitHub/TurtleTracerLib/app/src/main/java/com/turtletracerlib/command/FollowPathCommand.java).
-  - Added direct event binding in [`TurtleTracerReader`](file:///Users/matthew/Documents/GitHub/TurtleTracerLib/app/src/main/java/com/turtletracerlib/TurtleTracerReader.java) (`reader.onEvent("MarkerName", action)`) to seamlessly execute actions placed via the visualizer app.
+  - Updated [`TurtleTracerReader`](file:///Users/matthew/Documents/GitHub/TurtleTracerLib/app/src/main/java/com/turtletracerlib/TurtleTracerReader.java) to fully support the Turtle Tracer visualizer format:
+    - Parses all event marker types (`"parametric"`, `"temporal"`, `"pose"` / `"spatial"`), automatically mapping them to their respective `PathEvent` subclasses in `registerEvents(tracker)`.
+    - Parses Bézier control points (accessible via `get("point_control1")`, etc.).
+    - Parses full visualizer metadata: `version`, `header`, piecewise heading `segments`, `sequence` (paths, waits, rotations), and `shapes` (field obstacles).
+    - Added overloaded constructors supporting `InputStream`, `Reader`, and raw JSON `String` for flexible loading outside Android assets.
 
 ## v2.1.0 - 2026-05-24
 

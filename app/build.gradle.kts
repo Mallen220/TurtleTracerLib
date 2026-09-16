@@ -93,6 +93,7 @@ afterEvaluate {
         implementation(libs.pedro.pathing)
 
         testImplementation(libs.junit)
+        testImplementation("com.google.code.gson:gson:2.10.1")
         testCompileOnly(libs.ftc.robotcore)
         androidTestImplementation(libs.androidx.test.ext.junit)
         androidTestImplementation(libs.espresso.core)
