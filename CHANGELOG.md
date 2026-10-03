@@ -1,3 +1,13 @@
+## v3.0.3 - 2026-10-03
+
+**Behavior change:** `TurtleTracerReader` no longer rotates points. Poses it returns now match the numbers Turtle Tracer writes into generated code, so routines read from a `.turt` file place the robot where the same routine with the poses embedded does. Regenerate code and check any absolute positions that depended on the old values.
+
+- Removed the 90° rotation. `toPose(x, y, deg)` was `new Pose(y, 144 - x, deg - 90)`; it is now `new Pose(x, y, Math.toRadians(deg))`, since Turtle Tracer stores Pedro field coordinates. `"pose"` event markers use the same frame.
+- Poses are worked out from the file's start point and lines, so nothing in the file is stored twice. The start pose takes the start point's heading (Turtle Tracer saves `startDeg` as the heading of the first path the robot drives), and a line's pose takes its fixed end angle, or 0 when the robot follows the path. Files from older versions and `.pp` files follow the same rules as far as they have the fields; their start heading can differ from the app's when the first path in the sequence isn't the first line.
+- Pose names now match what generated code asks for: everything but letters and digits is dropped, a line with no name is `point<n>`, and lines linked under one name (saved as `Name (1)`, `Name (2)`) share the first one's pose. Before, names with punctuation or linked names returned `null`.
+- Control points are named `<line>_line<index>_control<n>`, so two lines with the same name no longer overwrite each other. The older `<line>_control<n>` still returns the first line with that name.
+- `getStartPoint().degrees` and `getLines().get(i)._linkedName` are now read from the file.
+
 ## v3.0.2 - 2026-10-03
 
 - Updated to Pedro Pathing 3.0.1 (`com.pedropathing:core:3.0.1`, which fixes the path completion calculation) and the FTC SDK 12.0.0 (2026/27 season) as the compile-time targets. No source changes were needed.
