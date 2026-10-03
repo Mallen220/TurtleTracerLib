@@ -114,6 +114,9 @@ public class ProgressTracker {
    */
   public void setCurrentPath(Path path) {
     this.currentPath = path;
+    // A path takes over from any turn being tracked. Otherwise a turn whose last update was never
+    // seen would keep reporting turn progress, and path events would wait for the path to end.
+    this.isTrackingTurn = false;
     resetEvents();
     if (telemetry != null) {
       telemetry.addData("ProgressTracker", "Set new path");
@@ -154,6 +157,44 @@ public class ProgressTracker {
    */
   public ProgressTracker onParametric(double progress, Runnable action) {
     return addEvent(new ParametricEvent(this::getPathProgress, progress, action));
+  }
+
+  /**
+   * Registers an event that triggers when one segment of a chained path reaches a progress threshold.
+   * <p>
+   * The follower reports progress per segment, so on a chain the same threshold would otherwise
+   * trigger on whichever segment gets there first. This only counts progress while the follower is on
+   * {@code segmentIndex} (0 is the first path of the chain).
+   * </p>
+   *
+   * @param segmentIndex The index of the segment within the chain.
+   * @param progress     The progress threshold (0.0 to 1.0) within that segment.
+   * @param action       The action to execute.
+   * @return This tracker (for chaining).
+   */
+  public ProgressTracker onParametric(int segmentIndex, double progress, Runnable action) {
+    return addEvent(
+        new ParametricEvent(
+            () -> follower.pathIndex() == segmentIndex ? getPathProgress() : -1.0, progress, action));
+  }
+
+  /**
+   * Registers an event that triggers while one segment of a chained path is within a progress range.
+   *
+   * @param segmentIndex  The index of the segment within the chain.
+   * @param startProgress The start of the range (0.0 to 1.0).
+   * @param endProgress   The end of the range (0.0 to 1.0).
+   * @param action        The action to execute.
+   * @return This tracker (for chaining).
+   */
+  public ProgressTracker onParametric(
+      int segmentIndex, double startProgress, double endProgress, Runnable action) {
+    return addEvent(
+        new ParametricEvent(
+            () -> follower.pathIndex() == segmentIndex ? getPathProgress() : -1.0,
+            startProgress,
+            endProgress,
+            action));
   }
 
   /**
@@ -278,6 +319,20 @@ public class ProgressTracker {
   }
 
   /**
+   * Removes the events registered for the current path (parametric, temporal, spatial and named
+   * zones) but keeps the actions bound with {@link #onEvent(String, Runnable)}.
+   * <p>
+   * Call this before registering the events of the next path, so that one path's events don't
+   * trigger while the follower is on another.
+   * </p>
+   */
+  public void clearPathEvents() {
+    eventZones.clear();
+    eventTriggered.clear();
+    pathEvents.clear();
+  }
+
+  /**
    * Resets all registered events to allow them to trigger again on subsequent runs.
    */
   public void resetEvents() {
@@ -387,6 +442,9 @@ public class ProgressTracker {
    */
   public void turn(double radians, String eventName, double eventThreshold) {
     follower.hold(follower.pose().withHeading(radians));
+    // hold() doesn't mark the follower busy again, so without this isBusy() is already false
+    // and a turn would look finished immediately.
+    follower.algorithm().reset();
     startHeading = follower.pose().heading();
     targetHeading = radians;
     totalTurnRadians = Math.abs(getSmallestAngleDifference(targetHeading, startHeading));

@@ -260,7 +260,7 @@ public final class TurtleTracerReader {
       for (TurtleTurt.Line line : file.lines) {
         if (line.eventMarkers != null) {
           for (TurtleTurt.EventMarker marker : line.eventMarkers) {
-            registerSingleMarker(tracker, marker);
+            registerSingleMarker(tracker, marker, -1, false);
           }
         }
       }
@@ -271,7 +271,7 @@ public final class TurtleTracerReader {
       for (TurtleTurt.SequenceItem item : file.sequence) {
         if (item.eventMarkers != null) {
           for (TurtleTurt.EventMarker marker : item.eventMarkers) {
-            registerSingleMarker(tracker, marker);
+            registerSingleMarker(tracker, marker, -1, true);
           }
         }
       }
@@ -279,12 +279,56 @@ public final class TurtleTracerReader {
   }
 
   /**
+   * Registers the event markers of one path line with the provided {@link ProgressTracker}.
+   * <p>
+   * Use this instead of {@link #registerEvents(ProgressTracker)} when following several paths in a
+   * row: {@code registerEvents} registers every line's markers at once, so they would all trigger
+   * during whichever path the follower is on. Instead, call {@link ProgressTracker#clearPathEvents()}
+   * before each path, register just that path's lines here, then call
+   * {@link ProgressTracker#setCurrentPath}.
+   * </p>
+   * <p>
+   * Parametric progress is per segment, so pass the position of the line within its chain as
+   * {@code segmentIndex} (0 for a path that isn't chained).
+   * </p>
+   *
+   * @param tracker      The {@link ProgressTracker} to register the events to.
+   * @param lineIndex    The index of the line in the file, as listed by {@link #getLines()}.
+   * @param segmentIndex The index of the line within the chain being followed.
+   */
+  public void registerLineEvents(ProgressTracker tracker, int lineIndex, int segmentIndex) {
+    if (file == null || tracker == null || file.lines == null) {
+      return;
+    }
+    if (lineIndex < 0 || lineIndex >= file.lines.size()) {
+      return;
+    }
+
+    for (Map.Entry<String, Runnable> entry : boundActions.entrySet()) {
+      tracker.onEvent(entry.getKey(), entry.getValue());
+    }
+
+    TurtleTurt.Line line = file.lines.get(lineIndex);
+    if (line.eventMarkers != null) {
+      for (TurtleTurt.EventMarker marker : line.eventMarkers) {
+        registerSingleMarker(tracker, marker, segmentIndex, false);
+      }
+    }
+  }
+
+  /**
    * Registers a single event marker with the tracker according to its type.
    *
-   * @param tracker The progress tracker.
-   * @param marker  The event marker definition.
+   * @param tracker      The progress tracker.
+   * @param marker       The event marker definition.
+   * @param segmentIndex The chain segment a parametric marker belongs to, or -1 for any segment.
+   * @param registerZone Whether to also register the marker as a named event, so that
+   *                     {@link ProgressTracker#executeEvent} can fire it. Waits and turns do that; a
+   *                     path's marker must not, or {@link ProgressTracker#update()} would trigger the
+   *                     action a second time through the named event.
    */
-  private void registerSingleMarker(ProgressTracker tracker, TurtleTurt.EventMarker marker) {
+  private void registerSingleMarker(
+      ProgressTracker tracker, TurtleTurt.EventMarker marker, int segmentIndex, boolean registerZone) {
     if (marker == null || marker.name == null) {
       return;
     }
@@ -311,17 +355,27 @@ public final class TurtleTracerReader {
 
       case "parametric":
       default:
+        double start = marker.position;
+        double end = marker.position;
+        boolean isRange = false;
         if (marker.points != null && marker.points.length > 0) {
-          if (marker.points.length == 1) {
-            tracker.onParametric(marker.points[0], action);
-            tracker.registerEvent(marker.name, marker.points[0]);
+          start = marker.points[0];
+          isRange = marker.points.length > 1;
+          end = isRange ? marker.points[1] : start;
+        }
+        if (isRange) {
+          if (segmentIndex >= 0) {
+            tracker.onParametric(segmentIndex, start, end, action);
           } else {
-            tracker.onParametric(marker.points[0], marker.points[1], action);
-            tracker.registerEvent(marker.name, marker.points[0], marker.points[1]);
+            tracker.onParametric(start, end, action);
           }
+        } else if (segmentIndex >= 0) {
+          tracker.onParametric(segmentIndex, start, action);
         } else {
-          tracker.onParametric(marker.position, action);
-          tracker.registerEvent(marker.name, marker.position);
+          tracker.onParametric(start, action);
+        }
+        if (registerZone) {
+          tracker.registerEvent(marker.name, start, end);
         }
         break;
     }
