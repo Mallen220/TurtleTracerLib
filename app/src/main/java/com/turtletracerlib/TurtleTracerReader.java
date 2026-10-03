@@ -39,25 +39,11 @@ public final class TurtleTracerReader {
    */
   private final Map<String, Pose> poses = new HashMap<>();
 
+
   /**
    * A map storing action bindings for event marker names.
    */
   private final Map<String, Runnable> boundActions = new HashMap<>();
-
-  /**
-   * The last recorded X coordinate during parsing.
-   */
-  private double lastX;
-
-  /**
-   * The last recorded Y coordinate during parsing.
-   */
-  private double lastY;
-
-  /**
-   * The last recorded heading (in degrees) during parsing.
-   */
-  private double lastDeg;
 
   /**
    * Constructs a new {@code TurtleTracerReader} from an assets file.
@@ -197,7 +183,8 @@ public final class TurtleTracerReader {
    * <ul>
    *   <li>{@code "startPoint"} - The starting pose.</li>
    *   <li>Segment names (e.g., {@code "DriveToShoot"}, {@code "dave"}).</li>
-   *   <li>Bézier control points (e.g., {@code "greg_control1"}, {@code "geerger_control2"}).</li>
+   *   <li>Bézier control points, named by their line (e.g., {@code "greg_line1_control1"}). The older
+   *   {@code "greg_control1"} form still finds the first line named {@code greg}.</li>
    * </ul>
    * </p>
    *
@@ -382,7 +369,21 @@ public final class TurtleTracerReader {
   }
 
   /**
-   * Processes the raw data from the {@code TurtleTurt} object and populates the {@code poses} map.
+   * Populates the {@code poses} map from the start point and lines, following the same rules the
+   * code Turtle Tracer generates does when it embeds the numbers:
+   * <ul>
+   *   <li>Coordinates are Pedro field coordinates, used as they are.</li>
+   *   <li>{@code startPoint} has the heading the file's start point records. Turtle Tracer saves it
+   *   as a linear heading whose {@code startDeg} is the heading of the first path the robot drives.</li>
+   *   <li>A line's pose is named after the line with everything but letters and digits removed
+   *   ({@code point<n>} if that leaves nothing), and has the heading the line ends with when that is
+   *   a fixed angle, or 0 when the robot follows the path.</li>
+   *   <li>Lines with the same name share the first one's pose.</li>
+   *   <li>Control points are named {@code <line>_line<index>_control<n>}.</li>
+   * </ul>
+   * Files from older versions and {@code .pp} files follow the same rules as far as they have the
+   * fields. Their start heading can differ from the app's when only the app can resolve it, such as
+   * when the first path in the sequence isn't the first line.
    */
   private void loadAllPoints() {
     if (file == null) {
@@ -390,101 +391,82 @@ public final class TurtleTracerReader {
     }
 
     if (file.startPoint != null) {
-      double x = file.startPoint.x;
-      double y = file.startPoint.y;
-      double deg = file.startPoint.startDeg;
-      if (Double.isNaN(deg)) deg = 0;
-
-      lastX = x;
-      lastY = y;
-      lastDeg = deg;
-
-      poses.put("startPoint", toPose(lastX, lastY, lastDeg));
+      TurtleTurt.StartPoint start = file.startPoint;
+      double deg = 0;
+      if ("constant".equals(start.heading)) {
+        deg = start.degrees;
+      } else if ("linear".equals(start.heading)) {
+        deg = start.startDeg;
+      }
+      poses.put("startPoint", toPose(start.x, start.y, deg));
     }
 
-    if (file.lines != null) {
-      for (int lineIdx = 0; lineIdx < file.lines.size(); lineIdx++) {
-        TurtleTurt.Line line = file.lines.get(lineIdx);
-        if (line.endPoint != null) {
-          double lx = line.endPoint.x;
-          double ly = line.endPoint.y;
+    if (file.lines == null) {
+      return;
+    }
 
-          double heading = extractHeading(line.endPoint.heading, lastX, lastY, lx, ly, lastDeg);
+    for (int lineIdx = 0; lineIdx < file.lines.size(); lineIdx++) {
+      TurtleTurt.Line line = file.lines.get(lineIdx);
+      if (line == null || line.endPoint == null) {
+        continue;
+      }
 
-          String name = line.name != null ? line.name.replace(" ", "") : "line" + lineIdx;
-          poses.put(name, toPose(lx, ly, heading));
+      // Duplicate names are written as "Name (1)", "Name (2)" with the real one kept in _linkedName.
+      String rawName = line._linkedName != null && !line._linkedName.isEmpty() ? line._linkedName : line.name;
+      String name = rawName == null ? "" : rawName.replaceAll("[^a-zA-Z0-9]", "");
+      if (name.isEmpty()) {
+        name = "point" + (lineIdx + 1);
+      }
 
-          // Parse and populate Bézier control points
-          if (line.controlPoints != null) {
-            for (int cpIdx = 0; cpIdx < line.controlPoints.size(); cpIdx++) {
-              TurtleTurt.ControlPoint cp = line.controlPoints.get(cpIdx);
-              Pose cpPose = toPose(cp.x, cp.y, 0);
-              poses.put(name + "_control" + (cpIdx + 1), cpPose);
-              poses.put(name + "_line" + lineIdx + "_control" + (cpIdx + 1), cpPose);
-            }
-          }
+      TurtleTurt.EndPoint end = line.endPoint;
+      double deg = 0;
+      if ("constant".equals(end.heading)) {
+        deg = end.degrees;
+      } else if ("linear".equals(end.heading)) {
+        deg = end.endDeg;
+      }
+      if (!poses.containsKey(name)) {
+        poses.put(name, toPose(end.x, end.y, deg));
+      }
 
-          lastX = lx;
-          lastY = ly;
-          lastDeg = heading;
+      if (line.controlPoints != null) {
+        for (int cpIdx = 0; cpIdx < line.controlPoints.size(); cpIdx++) {
+          TurtleTurt.ControlPoint cp = line.controlPoints.get(cpIdx);
+          Pose controlPose = toPose(cp.x, cp.y, 0);
+          poses.put(name + "_line" + lineIdx + "_control" + (cpIdx + 1), controlPose);
+          // Code generated before control points were named by line asks for "<line>_control<n>".
+          poses.putIfAbsent(name + "_control" + (cpIdx + 1), controlPose);
         }
       }
     }
   }
 
   /**
-   * Converts the visualizer's coordinate system to the robot's {@link Pose}.
+   * Converts a point from a Turtle Tracer file to a robot {@link Pose}.
    * <p>
-   * Transformations:
-   * <ul>
-   *   <li>Swaps X and Y: {@code newX = visualizerY}.</li>
-   *   <li>Inverts X: {@code newY = 144 - visualizerX}.</li>
-   *   <li>Adjusts heading: {@code radians = Math.toRadians(deg - 90)}.</li>
-   * </ul>
+   * Turtle Tracer stores Pedro field coordinates (origin at the field corner, heading 0 along +x), so
+   * only the heading is converted, from degrees to radians. Earlier versions rotated points 90°
+   * ({@code new Pose(y, 144 - x, deg - 90)}), which no longer matches what Turtle Tracer exports.
    * </p>
    *
-   * @param x   The X coordinate from the visualizer.
-   * @param y   The Y coordinate from the visualizer.
-   * @param deg The heading in degrees from the visualizer.
-   * @return The converted {@link Pose}.
+   * @param x   The X coordinate in inches.
+   * @param y   The Y coordinate in inches.
+   * @param deg The heading in degrees.
+   * @return The {@link Pose}.
    */
   public static Pose toPose(double x, double y, double deg) {
-    return new Pose(y, 144 - x, Math.toRadians(deg - 90));
+    return new Pose(x, y, Math.toRadians(deg));
   }
 
   /**
-   * Converts visualizer coordinates to robot {@link Pose} with 0 heading.
+   * Converts a point to a robot {@link Pose} with 0 heading.
    *
-   * @param x The X coordinate from the visualizer.
-   * @param y The Y coordinate from the visualizer.
-   * @return The converted {@link Pose}.
+   * @param x The X coordinate in inches.
+   * @param y The Y coordinate in inches.
+   * @return The {@link Pose}.
    */
   public static Pose toPose(double x, double y) {
     return toPose(x, y, 0);
-  }
-
-  /**
-   * Calculates the heading for a point based on the specified mode and previous coordinates.
-   */
-  private static double extractHeading(
-      String mode, double lastX, double lastY, double x, double y, double lastDeg) {
-    if (mode == null) {
-      return lastDeg;
-    }
-    double dx = x - lastX;
-    double dy = y - lastY;
-
-    if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6) {
-      return lastDeg;
-    }
-
-    double linearDeg = Math.toDegrees(Math.atan2(dy, dx));
-
-    if (mode.equals("linear") || mode.equals("tangential")) {
-      return linearDeg;
-    }
-
-    return lastDeg;
   }
 
   ///////////////////////////////////////////////////////////////////////////
@@ -514,6 +496,7 @@ public final class TurtleTracerReader {
       public double y;
       public String heading;
       public boolean locked;
+      public double degrees;
       public double startDeg;
       public double endDeg;
     }
@@ -521,6 +504,8 @@ public final class TurtleTracerReader {
     public static class Line {
       public String id;
       public String name;
+      /** The line's real name when it shares it with others and is saved as "Name (1)". */
+      public String _linkedName;
       public EndPoint endPoint;
       public List<ControlPoint> controlPoints;
       public String color;

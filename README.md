@@ -58,6 +58,20 @@ dependencies {
 
 ---
 
+## Reading Poses
+
+Code exported from Turtle Tracer without "Embed Pose Data" reads its poses from the `.turt` file at runtime, so you can edit the path in Turtle Tracer without regenerating code:
+
+```java
+TurtleTracerReader reader = new TurtleTracerReader("AutoRoutine.turt", hardwareMap.appContext);
+Pose start = reader.get("startPoint");
+Pose score = reader.get("Score");
+```
+
+Poses are Pedro field coordinates, the same numbers Turtle Tracer writes into embedded code. They come from the start point and lines already in the file, named the way the generated code asks for them.
+
+---
+
 ## Events System
 
 Turtle Tracer provides an intuitive Events system that allows triggering robot mechanism actions during path following—without the need for complex state machines.
