@@ -51,8 +51,8 @@ dependencies {
     implementation 'com.github.Mallen220:TurtleTracerLib:master-SNAPSHOT' // or use a specific tag
 
     // Core Dependencies
-    implementation 'com.pedropathing:core:3.0.0'
-    implementation 'com.pedropathing:revhub:3.0.0'
+    implementation 'com.pedropathing:core:3.0.1'
+    implementation 'com.pedropathing:revhub:3.0.1'
 }
 ```
 

@@ -1,5 +1,7 @@
 ## v3.0.1 - 2026-10-03
 
+- Updated to Pedro Pathing 3.0.1 (`com.pedropathing:core:3.0.1`, which fixes the path completion calculation) and the FTC SDK 12.0.0 (2026/27 season) as the compile-time targets. No source changes were needed.
+- Updated the build to Android Gradle Plugin 8.13.2 and Gradle 9.1.0, matching the FTC SDK 12.0 project. Gradle 9.1 also runs on newer JDKs; JitPack still builds with JDK 17.
 - Fixed `ProgressTracker.turn()` not marking the follower busy again. Pedro's `hold()` leaves `isBusy()` as it was, so a turn right after a finished path looked complete immediately. It now calls `follower.algorithm().reset()`.
 - Added path-scoped events for routines that follow several paths in a row. `registerEvents(tracker)` registers every line's markers at once, so each one could trigger during whichever path was running.
   - `ProgressTracker.clearPathEvents()` removes the current path's events and keeps actions bound with `onEvent`.
