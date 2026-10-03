@@ -1,3 +1,13 @@
+## v3.0.1 - 2026-10-03
+
+- Fixed `ProgressTracker.turn()` not marking the follower busy again. Pedro's `hold()` leaves `isBusy()` as it was, so a turn right after a finished path looked complete immediately. It now calls `follower.algorithm().reset()`.
+- Added path-scoped events for routines that follow several paths in a row. `registerEvents(tracker)` registers every line's markers at once, so each one could trigger during whichever path was running.
+  - `ProgressTracker.clearPathEvents()` removes the current path's events and keeps actions bound with `onEvent`.
+  - `ProgressTracker.onParametric(segmentIndex, progress, action)` (and a range overload) only counts progress while the follower is on that segment of a chained path.
+  - `TurtleTracerReader.registerLineEvents(tracker, lineIndex, segmentIndex)` registers one line's markers from the file.
+- Fixed parametric markers registered by `TurtleTracerReader.registerEvents` running their action twice once `tracker.update()` ran (once as an event and once as a named zone). Only waits and turns, which fire through `executeEvent`, still register zones.
+- `ProgressTracker.setCurrentPath()` now ends turn tracking, so a turn that was never seen finishing can't make the next path's events wait until the path ends.
+
 ## v3.0.0 - 2026-09-15
 
 - Updated PedroPathing dependency to 3.0.0 (`com.pedropathing:core:3.0.0`).
