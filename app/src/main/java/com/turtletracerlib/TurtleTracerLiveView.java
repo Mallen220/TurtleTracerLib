@@ -2,6 +2,8 @@ package com.turtletracerlib;
 
 import com.pedropathing.follower.Follower;
 import com.pedropathing.math.Pose;
+import com.pedropathing.math.Vector2D;
+import com.pedropathing.math.Velocity;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.PrintWriter;
@@ -16,6 +18,10 @@ import java.util.function.Supplier;
  * A utility class to send real-time robot pose telemetry to the Turtle Tracer
  * Visualizer.
  * It runs a TCP server on port 8888 and broadcasts the robot's pose as JSON.
+ * Each message also carries the robot clock ({@code t}, in ms) and, when a
+ * {@link Follower} is linked, its velocity and busy state, and while it
+ * follows a path the closest point on it, so the visualizer can compare the
+ * real robot's motion with its simulation settings.
  * <p>
  * This class uses the Singleton pattern to ensure the server persists across
  * OpModes.
@@ -70,6 +76,12 @@ public class TurtleTracerLiveView {
     private final AtomicReference<Supplier<Pose>> poseProvider = new AtomicReference<>();
 
     /**
+     * The follower linked with {@link #setFollower(Follower)}, used for velocity
+     * and busy state. {@code null} when a custom pose provider is used.
+     */
+    private final AtomicReference<Follower> follower = new AtomicReference<>();
+
+    /**
      * The thread running the server loop to accept client connections.
      */
     private Thread serverThread;
@@ -90,10 +102,20 @@ public class TurtleTracerLiveView {
     private static final int PORT = 8888;
 
     /**
-     * The interval in milliseconds between telemetry updates sent to connected
-     * clients (50ms).
+     * The default interval in milliseconds between telemetry updates (20ms, 50 Hz).
      */
-    private static final int UPDATE_INTERVAL_MS = 50;
+    private static final int DEFAULT_UPDATE_INTERVAL_MS = 20;
+
+    /**
+     * The shortest interval accepted by {@link #setUpdateIntervalMs(int)}.
+     */
+    private static final int MIN_UPDATE_INTERVAL_MS = 5;
+
+    /**
+     * The interval in milliseconds between telemetry updates sent to connected
+     * clients.
+     */
+    private volatile int updateIntervalMs = DEFAULT_UPDATE_INTERVAL_MS;
 
     /**
      * Private constructor to enforce the Singleton pattern.
@@ -114,7 +136,7 @@ public class TurtleTracerLiveView {
      * Sets the {@link Follower} instance to track.
      * <p>
      * This convenience method extracts the pose supplier from the provided
-     * {@code Follower}.
+     * {@code Follower}, and also sends its velocity and busy state.
      * Call this in your OpMode's {@code init()} method.
      * </p>
      *
@@ -122,6 +144,7 @@ public class TurtleTracerLiveView {
      *                 disable tracking.
      */
     public void setFollower(Follower follower) {
+        this.follower.set(follower);
         if (follower != null) {
             this.poseProvider.set(follower::pose);
         } else {
@@ -141,7 +164,27 @@ public class TurtleTracerLiveView {
      *                     {@link Pose}.
      */
     public void setPoseProvider(Supplier<Pose> poseProvider) {
+        this.follower.set(null);
         this.poseProvider.set(poseProvider);
+    }
+
+    /**
+     * Sets how often telemetry is sent to each connected client.
+     *
+     * @param intervalMs Milliseconds between messages (at least 5). The default
+     *                   is 20 (50 Hz).
+     */
+    public void setUpdateIntervalMs(int intervalMs) {
+        this.updateIntervalMs = Math.max(MIN_UPDATE_INTERVAL_MS, intervalMs);
+    }
+
+    /**
+     * Returns the interval in milliseconds between telemetry messages.
+     *
+     * @return The current update interval.
+     */
+    public int getUpdateIntervalMs() {
+        return updateIntervalMs;
     }
 
     /**
@@ -155,7 +198,91 @@ public class TurtleTracerLiveView {
      * </p>
      */
     public void disable() {
+        this.follower.set(null);
         this.poseProvider.set(null);
+    }
+
+    /**
+     * Where the follower is on the path it follows: the closest point, the
+     * path's direction there, and which path of the chain it is on.
+     */
+    static final class PathPoint {
+        final double x;
+        final double y;
+        final double tangentX;
+        final double tangentY;
+        final int pathIndex;
+
+        PathPoint(double x, double y, double tangentX, double tangentY, int pathIndex) {
+            this.x = x;
+            this.y = y;
+            this.tangentX = tangentX;
+            this.tangentY = tangentY;
+            this.pathIndex = pathIndex;
+        }
+
+        /** The follower's point on its path, or {@code null} when it isn't following one. */
+        static PathPoint of(Follower follower) {
+            if (!follower.isBusy()) {
+                return null;
+            }
+            try {
+                Pose closest = follower.closestPose();
+                Vector2D tangent = follower.closestTangent();
+                if (closest == null || tangent == null) {
+                    return null;
+                }
+                return new PathPoint(closest.x(), closest.y(), tangent.x(), tangent.y(),
+                        follower.pathIndex());
+            } catch (RuntimeException e) {
+                return null;
+            }
+        }
+    }
+
+    /**
+     * Builds one telemetry message.
+     *
+     * @param pose     The robot pose.
+     * @param velocity The follower's velocity (in/s and rad/s), or {@code null}.
+     * @param busy     Whether the follower is following a path, or {@code null}.
+     * @param timeMs   The robot clock in milliseconds.
+     * @return A single-line JSON object.
+     */
+    static String formatMessage(Pose pose, Velocity velocity, Boolean busy, double timeMs) {
+        return formatMessage(pose, velocity, busy, null, timeMs);
+    }
+
+    /**
+     * Builds one telemetry message.
+     *
+     * @param pose      The robot pose.
+     * @param velocity  The follower's velocity (in/s and rad/s), or {@code null}.
+     * @param busy      Whether the follower is following a path, or {@code null}.
+     * @param pathPoint Where the follower is on its path, or {@code null}.
+     * @param timeMs    The robot clock in milliseconds.
+     * @return A single-line JSON object.
+     */
+    static String formatMessage(Pose pose, Velocity velocity, Boolean busy, PathPoint pathPoint,
+            double timeMs) {
+        StringBuilder json = new StringBuilder(String.format(Locale.US,
+                "{\"x\":%.4f, \"y\":%.4f, \"heading\":%.4f, \"t\":%.1f",
+                pose.x(), pose.y(), pose.heading(), timeMs));
+        if (velocity != null) {
+            json.append(String.format(Locale.US,
+                    ", \"vx\":%.4f, \"vy\":%.4f, \"omega\":%.4f",
+                    velocity.vx, velocity.vy, velocity.omega));
+        }
+        if (busy != null) {
+            json.append(", \"busy\":").append(busy);
+        }
+        if (pathPoint != null) {
+            json.append(String.format(Locale.US,
+                    ", \"cx\":%.4f, \"cy\":%.4f, \"tx\":%.4f, \"ty\":%.4f, \"pathIndex\":%d",
+                    pathPoint.x, pathPoint.y, pathPoint.tangentX, pathPoint.tangentY,
+                    pathPoint.pathIndex));
+        }
+        return json.append('}').toString();
     }
 
     /**
@@ -236,7 +363,7 @@ public class TurtleTracerLiveView {
      * Handles the communication with a single connected client.
      * <p>
      * Continuously sends the current robot pose (as JSON) to the client at the
-     * defined update interval.
+     * current update interval.
      * </p>
      *
      * @param client The {@link Socket} representing the connected client.
@@ -247,14 +374,16 @@ public class TurtleTracerLiveView {
 
             while (running.get() && !client.isClosed() && client.isConnected()) {
                 Supplier<Pose> provider = poseProvider.get();
+                Follower linked = follower.get();
                 if (provider != null) {
                     try {
                         Pose pose = provider.get();
                         if (pose != null) {
-                            String json = String.format(Locale.US,
-                                    "{\"x\":%.4f, \"y\":%.4f, \"heading\":%.4f}",
-                                    pose.x(), pose.y(), pose.heading());
-                            writer.println(json);
+                            Velocity velocity = linked != null ? linked.velocity() : null;
+                            Boolean busy = linked != null ? linked.isBusy() : null;
+                            PathPoint pathPoint = linked != null ? PathPoint.of(linked) : null;
+                            writer.println(formatMessage(pose, velocity, busy, pathPoint,
+                                    System.nanoTime() / 1e6));
                         }
                     } catch (Exception e) {
                         // Handle potential exceptions from accessing closed hardware in provider
@@ -268,7 +397,7 @@ public class TurtleTracerLiveView {
                 }
 
                 try {
-                    Thread.sleep(UPDATE_INTERVAL_MS);
+                    Thread.sleep(updateIntervalMs);
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     break;
