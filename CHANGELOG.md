@@ -1,3 +1,7 @@
+## v3.0.4 - 2026-10-24
+
+Include robot time, follower velocity, busy state, and path tracking data in live view messages.
+
 ## v3.0.3 - 2026-10-03
 
 **Behavior change:** `TurtleTracerReader` no longer rotates points. Poses it returns now match the numbers Turtle Tracer writes into generated code, so routines read from a `.turt` file place the robot where the same routine with the poses embedded does. Regenerate code and check any absolute positions that depended on the old values.
