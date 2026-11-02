@@ -1,4 +1,8 @@
-## Unreleased
+## v3.1.1 - 2026-11-02
+
+- Updated to Pedro Pathing 3.0.2 (`com.pedropathing:core:3.0.2`) as the compile-time target. No source changes were needed. Teams should use `core` and `revhub` 3.0.2 in their own build.
+
+## v3.1.0 - 2026-11-02
 
 Added an auto selector, alliance selection and mirroring (`com.turtletracerlib.auto`). It has no dependency on a command framework, so it works with Java, Kotlin, SolversLib, NextFTC, Ivy and the plain FTC SDK.
 
