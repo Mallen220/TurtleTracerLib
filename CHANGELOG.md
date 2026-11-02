@@ -1,3 +1,16 @@
+## Unreleased
+
+Added an auto selector, alliance selection and mirroring (`com.turtletracerlib.auto`). It has no dependency on a command framework, so it works with Java, Kotlin, SolversLib, NextFTC, Ivy and the plain FTC SDK.
+
+- `AutoRegistry<T>` holds the team's autos (`T` is the framework's `Command` type). Add them with a lambda, or mark classes `@TurtleAuto` and call `scan(...)` to find them in the app's dex files.
+- `AutoSelector<T>` draws a gamepad menu during init: D-pad up/down scroll a windowed list, D-pad left/right (or bumpers) set the alliance (`NONE`, `RED`, `BLUE`), X cycles the mirror override (AUTO, ON, OFF) and A locks the choice. `buildSelected()` creates the chosen auto. `AutoSelection` keeps the last alliance for TeleOp.
+- Each auto says which alliance its paths are drawn for (`AutoRegistry.add(name, factory, Alliance)`, `AutoEntry.drawnFor`, `@TurtleAuto(drawnFor = ...)`), as paths can be drawn for different sides. Autos that don't say use `AutoConfig.baseAlliance` (RED by default). `AutoContext.drawnFor(Alliance)` works out the mirroring again for a given side, which is how code exported from Turtle Tracer applies each project's own side.
+- `AutoRegistry.using(...)` gives scanned `@TurtleAuto` classes what their constructors take (the follower, hardware map, telemetry...), so code exported from Turtle Tracer can be found with `scan`. A class the registry can't build is left out when scanning, with the reason in `skipped()` and in the menu, instead of failing when the driver presses Start.
+- `AutoSelection.record(Alliance, boolean)` and `AutoSelection.record(AutoContext)` let an auto record the alliance it ran for and whether it mirrored, for TeleOp, without a selector deciding it. `AutoContext.mirroring(MirrorPolicy)` lets an auto set its own mirror policy, whatever it was registered with.
+- Alliance and mirroring are separate. By default mirroring follows the alliance (mirror when it differs from the side the auto is drawn for), but `MirrorPolicy.ALWAYS`/`NEVER`, globally or per auto, stop that. Teams with separate red and blue files register those autos with `MirrorPolicy.NEVER` and use `AutoContext.pick(red, blue)`.
+- `FieldMirror` flips x, y or both (`MirrorAxes`, default `BOTH`, a 180° rotation about the field centre). `AutoContext.pose/heading/x/y` apply it to hand-written poses and headings.
+- `TurtleTracerReader.mirrored(FieldMirror)` mirrors the poses from `get`, `getAllPoses` and spatial event markers. The default mirrors nothing, so existing code is unchanged.
+
 ## v3.0.4 - 2026-10-24
 
 Include robot time, follower velocity, busy state, and path tracking data in live view messages.

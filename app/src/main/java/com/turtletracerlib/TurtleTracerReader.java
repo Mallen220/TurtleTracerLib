@@ -4,6 +4,7 @@ import android.content.Context;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.pedropathing.math.Pose;
+import com.turtletracerlib.auto.FieldMirror;
 import com.turtletracerlib.pathing.NamedCommands;
 import com.turtletracerlib.pathing.ProgressTracker;
 
@@ -44,6 +45,11 @@ public final class TurtleTracerReader {
    * A map storing action bindings for event marker names.
    */
   private final Map<String, Runnable> boundActions = new HashMap<>();
+
+  /**
+   * The mirror applied to poses when they are read. Poses are stored as the file has them.
+   */
+  private FieldMirror mirror = FieldMirror.none();
 
   /**
    * Constructs a new {@code TurtleTracerReader} from an assets file.
@@ -168,12 +174,33 @@ public final class TurtleTracerReader {
   }
 
   /**
+   * Mirrors every pose this reader returns, such as to run a path drawn for one alliance on the
+   * other. Applies to {@link #get}, {@link #getAllPoses} and spatial event markers, not to the raw
+   * file data from {@link #getLines()}, {@link #getStartPoint()} and {@link #getShapes()}. The default
+   * mirrors nothing.
+   *
+   * @param mirror The mirror to apply, such as {@code autoContext.mirror()}; null for none.
+   * @return This reader (for chaining).
+   */
+  public TurtleTracerReader mirrored(FieldMirror mirror) {
+    this.mirror = mirror == null ? FieldMirror.none() : mirror;
+    return this;
+  }
+
+  /**
    * Retrieves all parsed poses by their name.
    *
-   * @return An unmodifiable view of all poses.
+   * @return An unmodifiable map of all poses, mirrored if {@link #mirrored} was set.
    */
   public Map<String, Pose> getAllPoses() {
-    return Collections.unmodifiableMap(poses);
+    if (mirror.isIdentity()) {
+      return Collections.unmodifiableMap(poses);
+    }
+    Map<String, Pose> result = new HashMap<>();
+    for (Map.Entry<String, Pose> entry : poses.entrySet()) {
+      result.put(entry.getKey(), mirror.pose(entry.getValue()));
+    }
+    return Collections.unmodifiableMap(result);
   }
 
   /**
@@ -189,10 +216,10 @@ public final class TurtleTracerReader {
    * </p>
    *
    * @param name The name of the point or control point.
-   * @return The corresponding {@link Pose}, or {@code null} if not found.
+   * @return The corresponding {@link Pose} (mirrored if {@link #mirrored} was set), or {@code null} if not found.
    */
   public Pose get(String name) {
-    return poses.get(name);
+    return mirror.pose(poses.get(name));
   }
 
   /**
@@ -336,7 +363,7 @@ public final class TurtleTracerReader {
 
       case "pose":
       case "spatial":
-        Pose targetPose = toPose(marker.poseX, marker.poseY, marker.poseHeading);
+        Pose targetPose = mirror.pose(toPose(marker.poseX, marker.poseY, marker.poseHeading));
         tracker.onSpatial(targetPose, 2.0, action);
         break;
 

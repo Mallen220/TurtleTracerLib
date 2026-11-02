@@ -226,10 +226,10 @@ public class TurtleTracerReaderTest {
         assertNotNull(reader.get("dave"));
         assertNotNull(reader.get("greg"));
 
-        // Verify control point parsing
+        // Verify control point parsing (Pedro coordinates, as stored: no rotation since v3.0.3)
         assertNotNull(reader.get("greg_control1"));
-        assertEquals(50.0, reader.get("greg_control1").x(), 1e-4);
-        assertEquals(144.0 - 86.0, reader.get("greg_control1").y(), 1e-4);
+        assertEquals(86.0, reader.get("greg_control1").x(), 1e-4);
+        assertEquals(50.0, reader.get("greg_control1").y(), 1e-4);
 
         // Verify sequence and shapes
         assertEquals(2, reader.getSequence().size());
